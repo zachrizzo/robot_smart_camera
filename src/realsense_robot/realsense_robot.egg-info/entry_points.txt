@@ -1,0 +1,5 @@
+[console_scripts]
+camera_node = realsense_robot.camera_node:main
+detection_node = realsense_robot.detection_node:main
+pointcloud_node = realsense_robot.pointcloud_node:main
+web_interface = realsense_robot.web_interface:main
