@@ -2,6 +2,16 @@
 
 This project implements a robot system using ROS 2 and Intel RealSense camera for object detection and distance measurement.
 
+
+
+## How to run the code:
+
+```bash
+cd ~/Desktop/robot1 && colcon build --symlink-install && source install/setup.bash && ros2 launch realsense_robot robot.launch.py 
+```
+
+
+
 ## System Requirements
 
 - Ubuntu 24.04
@@ -87,3 +97,6 @@ realsense_robot/
 │   └── camera_params.yaml
 └── setup.py
 ``` # robot_smart_camera
+
+
+

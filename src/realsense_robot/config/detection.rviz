@@ -83,7 +83,7 @@ Visualization Manager:
       Name: Image
       Normalize Range: true
       Queue Size: 2
-      Topic: /camera/color/image_raw
+      Topic: /detection_image
       Unreliable: false
       Value: true
     - Class: rviz_default_plugins/MarkerArray

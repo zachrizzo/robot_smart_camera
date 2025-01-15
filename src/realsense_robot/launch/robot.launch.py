@@ -34,7 +34,12 @@ def generate_launch_description():
         package='realsense_robot',
         executable='detection_node.py',
         name='detection_node',
-        output='screen'
+        output='screen',
+        remappings=[
+            ('/camera/color/image_raw', '/camera/camera/color/image_raw'),
+            ('/camera/aligned_depth_to_color/image_raw', '/camera/camera/aligned_depth_to_color/image_raw'),
+            ('/camera/aligned_depth_to_color/camera_info', '/camera/camera/aligned_depth_to_color/camera_info')
+        ]
     )
     
     # Point cloud processing node

@@ -4,10 +4,9 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 import os
-import pyrealsense2 as rs
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import PointCloud2, Image
+from sensor_msgs.msg import PointCloud2, Image, CameraInfo
 from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
 import sensor_msgs_py.point_cloud2 as pc2
@@ -19,81 +18,84 @@ class DetectionNode(Node):
     def __init__(self):
         super().__init__('detection_node')
         
+        # Create subscribers
+        self.color_sub = self.create_subscription(Image, '/camera/camera/color/image_raw', self.color_callback, 10)
+        self.depth_sub = self.create_subscription(Image, '/camera/camera/aligned_depth_to_color/image_raw', self.depth_callback, 10)
+        self.camera_info_sub = self.create_subscription(CameraInfo, '/camera/camera/aligned_depth_to_color/camera_info', self.camera_info_callback, 10)
+        
         # Create publishers
-        self.pc_pub = self.create_publisher(PointCloud2, '/camera/pointcloud', 10)
-        self.image_pub = self.create_publisher(Image, '/camera/color/image_raw', 10)
         self.marker_pub = self.create_publisher(MarkerArray, '/detection_markers', 10)
+        self.image_pub = self.create_publisher(Image, '/detection_image', 10)
         
         # Initialize CvBridge
         self.bridge = CvBridge()
         
-        # Initialize RealSense pipeline
-        self.pipeline = rs.pipeline()
-        self.config = rs.config()
-        
-        # Enable color and depth streams
-        self.config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-        self.config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        
-        # Start streaming
-        self.pipeline_profile = self.pipeline.start(self.config)
-        
-        # Get device and set advanced mode
-        device = self.pipeline_profile.get_device()
-        depth_sensor = device.first_depth_sensor()
-        if depth_sensor.supports(rs.option.enable_auto_exposure):
-            depth_sensor.set_option(rs.option.enable_auto_exposure, 1)
-        
-        # Create align object
-        self.align = rs.align(rs.stream.color)
+        # Store latest frames
+        self.latest_color_frame = None
+        self.latest_depth_frame = None
+        self.camera_info = None
         
         # Load YOLO model
-        conda_env_path = '/home/zach/anaconda3/envs/realsense_env'
-        model_path = os.path.join(conda_env_path, 'yolov8n.pt')
+        model_path = os.path.join(os.path.expanduser('~'), 'Desktop', 'robot1', '.venv', 'yolov8n.pt')
+        self.get_logger().info(f'Attempting to load YOLO model from: {model_path}')
         if not os.path.exists(model_path):
-            print(f'Downloading YOLOv8 model to {model_path}')
+            self.get_logger().info(f'Model not found. Downloading YOLOv8 model to {model_path}')
             model = YOLO('yolov8n.pt')
             model.save(model_path)
-        self.model = YOLO(model_path)
+        try:
+            self.model = YOLO(model_path)
+            self.get_logger().info('YOLO model loaded successfully')
+        except Exception as e:
+            self.get_logger().error(f'Failed to load YOLO model: {str(e)}')
+            raise e
         
         # Create timer for processing frames
         self.create_timer(1/30, self.process_frame)  # 30 Hz
         
-        print('Detection node initialized')
+        self.get_logger().info('Detection node initialized')
+    
+    def camera_info_callback(self, msg):
+        self.camera_info = msg
+    
+    def color_callback(self, msg):
+        try:
+            self.get_logger().info(f'Received color frame with encoding: {msg.encoding}, size: {msg.width}x{msg.height}')
+            self.latest_color_frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.get_logger().info(f'Successfully converted color frame to OpenCV format: shape={self.latest_color_frame.shape}')
+        except Exception as e:
+            self.get_logger().error(f'Error converting color image: {str(e)}')
+    
+    def depth_callback(self, msg):
+        try:
+            self.latest_depth_frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+        except Exception as e:
+            self.get_logger().error(f'Error converting depth image: {str(e)}')
     
     def process_frame(self):
+        if self.latest_color_frame is None:
+            self.get_logger().warn('No color frame available')
+            return
+        if self.latest_depth_frame is None:
+            self.get_logger().warn('No depth frame available')
+            return
+        if self.camera_info is None:
+            self.get_logger().warn('No camera info available')
+            return
+        
         try:
-            # Get frames
-            frames = self.pipeline.wait_for_frames(timeout_ms=1000)
-            aligned_frames = self.align.process(frames)
-            depth_frame = aligned_frames.get_depth_frame()
-            color_frame = aligned_frames.get_color_frame()
+            # Log frame processing
+            self.get_logger().info('Processing new frame')
             
-            if not depth_frame or not color_frame:
-                return
+            # Create a copy of the frame for visualization
+            vis_frame = self.latest_color_frame.copy()
             
-            # Convert to numpy arrays
-            depth_image = np.asanyarray(depth_frame.get_data())
-            color_image = np.asanyarray(color_frame.get_data())
-            
-            # Create point cloud
-            pc = rs.pointcloud()
-            pc.map_to(color_frame)
-            points = pc.calculate(depth_frame)
-            vertices = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
-            
-            # Create PointCloud2 message
-            header = self.get_header()
-            pc2_msg = pc2.create_cloud_xyz32(header, vertices)
-            self.pc_pub.publish(pc2_msg)
-            
-            # Publish color image
-            img_msg = self.bridge.cv2_to_imgmsg(color_image, encoding='bgr8')
-            img_msg.header = header
-            self.image_pub.publish(img_msg)
+            # Verify frame dimensions
+            self.get_logger().info(f'Frame shape: {vis_frame.shape}')
             
             # Run detection
-            results = self.model(color_image)
+            self.get_logger().info('Running YOLO detection on frame')
+            results = self.model(self.latest_color_frame)
+            self.get_logger().info('YOLO detection completed')
             
             # Create marker array for detections
             marker_array = MarkerArray()
@@ -101,34 +103,59 @@ class DetectionNode(Node):
             # Process results
             for r in results:
                 boxes = r.boxes
+                self.get_logger().info(f'Found {len(boxes)} detections')
+                
                 for i, box in enumerate(boxes):
+                    # Get confidence and class
+                    cls = int(box.cls[0])
+                    conf = float(box.conf[0])
+                    name = self.model.names[cls]
+                    self.get_logger().info(f'Detection {i}: {name} with confidence {conf:.2f}')
+                    
                     # Get box coordinates
                     x1, y1, x2, y2 = box.xyxy[0]
                     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                    
+                    # Draw bounding box and label on the visualization frame
+                    cv2.rectangle(vis_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(vis_frame, f'{name} {conf:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     
                     # Get center point
                     center_x = (x1 + x2) // 2
                     center_y = (y1 + y2) // 2
                     
                     try:
-                        distance = depth_frame.get_distance(center_x, center_y)
-                        if distance > 0:
-                            # Get 3D point from depth
-                            depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-                            point_3d = rs.rs2_deproject_pixel_to_point(depth_intrin, [center_x, center_y], distance)
+                        # Get depth value (in meters)
+                        depth = self.latest_depth_frame[center_y, center_x] / 1000.0  # Convert mm to meters
+                        self.get_logger().info(f'Depth at center point: {depth:.2f}m')
+                        
+                        if depth > 0:
+                            # Convert to 3D point
+                            fx = self.camera_info.k[0]  # focal length x
+                            fy = self.camera_info.k[4]  # focal length y
+                            cx = self.camera_info.k[2]  # optical center x
+                            cy = self.camera_info.k[5]  # optical center y
+                            
+                            # Calculate 3D point
+                            x = (center_x - cx) * depth / fx
+                            y = (center_y - cy) * depth / fy
+                            z = depth
+                            
+                            self.get_logger().info(f'3D position: x={x:.2f}, y={y:.2f}, z={z:.2f}')
                             
                             # Create marker for detection
                             marker = Marker()
-                            marker.header = header
+                            marker.header.stamp = self.get_clock().now().to_msg()
+                            marker.header.frame_id = "camera_link"
                             marker.ns = "detections"
                             marker.id = i
                             marker.type = Marker.CUBE
                             marker.action = Marker.ADD
                             
                             # Set marker position
-                            marker.pose.position.x = point_3d[0]
-                            marker.pose.position.y = point_3d[1]
-                            marker.pose.position.z = point_3d[2]
+                            marker.pose.position.x = z  # RealSense camera coordinate system to ROS coordinate system
+                            marker.pose.position.y = -x
+                            marker.pose.position.z = -y
                             
                             # Set marker size
                             marker.scale.x = 0.1
@@ -142,11 +169,8 @@ class DetectionNode(Node):
                             marker.color.a = 1.0
                             
                             # Add text marker
-                            cls = int(box.cls[0])
-                            conf = float(box.conf[0])
-                            name = self.model.names[cls]
                             text_marker = Marker()
-                            text_marker.header = header
+                            text_marker.header = marker.header
                             text_marker.ns = "labels"
                             text_marker.id = i + 1000
                             text_marker.type = Marker.TEXT_VIEW_FACING
@@ -162,25 +186,33 @@ class DetectionNode(Node):
                             
                             marker_array.markers.append(marker)
                             marker_array.markers.append(text_marker)
+                            self.get_logger().info(f'Added markers for {name} at position (x={z:.2f}, y={-x:.2f}, z={-y:.2f})')
                             
                     except Exception as e:
                         self.get_logger().warn(f"Error processing detection: {e}")
             
+            # Publish the annotated image
+            try:
+                if vis_frame is not None:
+                    img_msg = self.bridge.cv2_to_imgmsg(vis_frame, "bgr8")
+                    img_msg.header.stamp = self.get_clock().now().to_msg()
+                    img_msg.header.frame_id = "camera_link"
+                    self.image_pub.publish(img_msg)
+                    self.get_logger().info(f'Published annotated image with shape {vis_frame.shape}')
+                else:
+                    self.get_logger().warn('Visualization frame is None')
+            except Exception as e:
+                self.get_logger().error(f'Error publishing image: {e}')
+            
             # Publish markers
-            self.marker_pub.publish(marker_array)
+            if len(marker_array.markers) > 0:
+                self.marker_pub.publish(marker_array)
+                self.get_logger().info(f'Published {len(marker_array.markers)} markers')
+            else:
+                self.get_logger().info('No markers to publish')
             
         except Exception as e:
             self.get_logger().error(f"Error in process_frame: {e}")
-    
-    def get_header(self):
-        from std_msgs.msg import Header
-        header = Header()
-        header.stamp = self.get_clock().now().to_msg()
-        header.frame_id = "camera_link"
-        return header
-    
-    def __del__(self):
-        self.pipeline.stop()
 
 def main():
     rclpy.init()
