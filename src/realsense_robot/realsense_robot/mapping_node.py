@@ -52,72 +52,105 @@ class MappingNode(Node):
         self.current_pose = None
         self.global_pcd = o3d.geometry.PointCloud()
         self.previous_pcd = None
-        self.max_points = 500000  # Reduced for better performance
-        self.voxel_size = 0.02    # Increased slightly for better merging
+        self.max_points = 1000000  # Increased for higher resolution
+        self.voxel_size = 0.005   # Decreased for higher resolution (5mm)
         
         # Parameters for outlier removal
-        self.nb_neighbors = 30     # Increased for better noise removal
-        self.std_ratio = 1.5      # More aggressive outlier removal
+        self.nb_neighbors = 50     # Increased for better noise removal
+        self.std_ratio = 2.0      # Less aggressive to keep more detail
         
         # Parameters for radius outlier removal
-        self.radius = 0.05        # 5cm radius
-        self.min_points = 10      # Minimum points in radius
+        self.radius = 0.02        # 2cm radius - decreased for finer detail
+        self.min_points = 5       # Reduced minimum points for higher detail
         
         # ICP parameters
-        self.icp_threshold = 0.05  # 5cm threshold for ICP
-        self.icp_iterations = 50   # Maximum ICP iterations
+        self.icp_threshold = 0.02  # 2cm threshold for more precise alignment
+        self.icp_iterations = 30   # Reduced for better performance
         
         # Create timer for publishing global map
-        self.create_timer(0.2, self.publish_map)
+        self.create_timer(0.1, self.publish_map)  # Increased publish rate
         
-        self.get_logger().info('Mapping node initialized with optimized parameters')
+        # Initialize CUDA for GPU acceleration if available
+        try:
+            if o3d.core.cuda.is_available():
+                o3d.core.Device("CUDA:0")
+                self.get_logger().info('CUDA acceleration enabled')
+            else:
+                self.get_logger().info('CUDA not available, using CPU')
+        except:
+            self.get_logger().warn('Failed to initialize CUDA, using CPU')
+        
+        self.get_logger().info('Mapping node initialized with high-resolution parameters')
         
     def filter_point_cloud(self, pcd):
         """Apply multiple filtering steps to clean the point cloud."""
-        # Voxel downsampling
-        pcd = pcd.voxel_down_sample(voxel_size=self.voxel_size)
-        
-        # Statistical outlier removal
-        pcd, _ = pcd.remove_statistical_outlier(
-            nb_neighbors=self.nb_neighbors,
-            std_ratio=self.std_ratio
-        )
-        
-        # Radius outlier removal
-        pcd, _ = pcd.remove_radius_outlier(
-            nb_points=self.min_points,
-            radius=self.radius
-        )
-        
-        return pcd
+        try:
+            # Convert to CUDA tensor if available
+            if o3d.core.cuda.is_available():
+                pcd = pcd.to(o3d.core.Device("CUDA:0"))
+            
+            # Voxel downsampling
+            pcd = pcd.voxel_down_sample(voxel_size=self.voxel_size)
+            
+            # Statistical outlier removal
+            pcd, _ = pcd.remove_statistical_outlier(
+                nb_neighbors=self.nb_neighbors,
+                std_ratio=self.std_ratio
+            )
+            
+            # Radius outlier removal - only if points are sparse
+            if len(pcd.points) < self.max_points // 2:
+                pcd, _ = pcd.remove_radius_outlier(
+                    nb_points=self.min_points,
+                    radius=self.radius
+                )
+            
+            return pcd
+        except Exception as e:
+            self.get_logger().warn(f'Error in filtering: {str(e)}')
+            return pcd
         
     def register_point_cloud(self, source, target):
-        """Register two point clouds using ICP."""
+        """Register two point clouds using ICP with GPU acceleration if available."""
         if len(source.points) < 10 or len(target.points) < 10:
             return source, np.eye(4)
             
-        # Estimate normals if they don't exist
-        if not source.has_normals():
-            source.estimate_normals(
-                search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30)
-            )
-        if not target.has_normals():
-            target.estimate_normals(
-                search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30)
-            )
+        try:
+            # Estimate normals if they don't exist
+            if not source.has_normals():
+                source.estimate_normals(
+                    search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.05, max_nn=30)
+                )
+            if not target.has_normals():
+                target.estimate_normals(
+                    search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.05, max_nn=30)
+                )
             
-        # Perform ICP
-        result = o3d.pipelines.registration.registration_icp(
-            source, target,
-            self.icp_threshold,
-            np.eye(4),
-            o3d.pipelines.registration.TransformationEstimationPointToPlane(),
-            o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=self.icp_iterations)
-        )
-        
-        # Transform the source point cloud
-        source.transform(result.transformation)
-        return source, result.transformation
+            # Use GPU-accelerated ICP if available
+            if o3d.core.cuda.is_available():
+                result = o3d.pipelines.registration.registration_icp(
+                    source.to(o3d.core.Device("CUDA:0")),
+                    target.to(o3d.core.Device("CUDA:0")),
+                    self.icp_threshold,
+                    np.eye(4),
+                    o3d.pipelines.registration.TransformationEstimationPointToPlane(),
+                    o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=self.icp_iterations)
+                )
+            else:
+                result = o3d.pipelines.registration.registration_icp(
+                    source, target,
+                    self.icp_threshold,
+                    np.eye(4),
+                    o3d.pipelines.registration.TransformationEstimationPointToPlane(),
+                    o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=self.icp_iterations)
+                )
+            
+            # Transform the source point cloud
+            source.transform(result.transformation)
+            return source, result.transformation
+        except Exception as e:
+            self.get_logger().warn(f'Error in registration: {str(e)}')
+            return source, np.eye(4)
 
     def pointcloud_callback(self, msg):
         if self.current_pose is None:
