@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Imu, PointCloud2
+from sensor_msgs.msg import Imu
 from geometry_msgs.msg import PoseStamped, TransformStamped, Vector3
 from tf2_ros import TransformBroadcaster
 import numpy as np
@@ -13,22 +13,38 @@ class IMUNode(Node):
     def __init__(self):
         super().__init__('imu_node')
         
-        # Create subscriber for IMU data with compatible QoS
+        # Create subscribers for accelerometer and gyroscope data with compatible QoS
         qos = rclpy.qos.QoSProfile(
             reliability=rclpy.qos.QoSReliabilityPolicy.BEST_EFFORT,
             history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
         
-        self.imu_sub = self.create_subscription(
+        # Create synchronized subscribers for accelerometer and gyroscope
+        self.accel_sub = message_filters.Subscriber(
+            self,
             Imu,
-            '/camera/camera/imu',
-            self.imu_callback,
-            qos
+            '/camera/camera/accel/sample',
+            qos_profile=qos
         )
         
-        # Create publishers
-        self.pose_pub = self.create_publisher(PoseStamped, '/camera/pose', 10)
+        self.gyro_sub = message_filters.Subscriber(
+            self,
+            Imu,
+            '/camera/camera/gyro/sample',
+            qos_profile=qos
+        )
+        
+        # Create synchronizer
+        self.ts = message_filters.ApproximateTimeSynchronizer(
+            [self.accel_sub, self.gyro_sub],
+            queue_size=10,
+            slop=0.1
+        )
+        self.ts.registerCallback(self.imu_callback)
+        
+        # Create publishers with the same QoS profile
+        self.pose_pub = self.create_publisher(PoseStamped, '/camera/pose', qos)
         self.tf_broadcaster = TransformBroadcaster(self)
         
         # Initialize pose tracking
@@ -59,7 +75,12 @@ class IMUNode(Node):
         self.accel_bias = np.array([0.0, 0.0, 0.0])
         self.bias_samples = 50  # Reduced for faster startup
         
-        self.get_logger().info('IMU Node initialized with more responsive parameters')
+        # Debug counters
+        self.imu_msg_count = 0
+        self.pose_pub_count = 0
+        self.last_debug_time = self.get_clock().now()
+        
+        self.get_logger().info('IMU Node initialized with synchronized IMU subscribers')
         
     def calibrate_gravity(self, accel):
         if not self.gravity_calibrated:
@@ -82,19 +103,27 @@ class IMUNode(Node):
             return True
         return False
         
-    def imu_callback(self, msg: Imu):
+    def imu_callback(self, accel_msg: Imu, gyro_msg: Imu):
+        self.imu_msg_count += 1
+        
         # Extract linear acceleration and angular velocity
         accel = np.array([
-            msg.linear_acceleration.x,
-            msg.linear_acceleration.y,
-            msg.linear_acceleration.z
+            accel_msg.linear_acceleration.x,
+            accel_msg.linear_acceleration.y,
+            accel_msg.linear_acceleration.z
         ])
         
         gyro = np.array([
-            msg.angular_velocity.x,
-            msg.angular_velocity.y,
-            msg.angular_velocity.z
+            gyro_msg.angular_velocity.x,
+            gyro_msg.angular_velocity.y,
+            gyro_msg.angular_velocity.z
         ])
+        
+        # Print debug info every second
+        current_time = self.get_clock().now()
+        if (current_time - self.last_debug_time).nanoseconds > 1e9:  # 1 second
+            self.get_logger().info(f'IMU messages received: {self.imu_msg_count}, Poses published: {self.pose_pub_count}')
+            self.last_debug_time = current_time
         
         # Calibrate gravity and estimate biases
         self.calibrate_gravity(accel)
@@ -119,7 +148,7 @@ class IMUNode(Node):
         self.gyro_lpf[gyro_mask] = 0.0
         
         # Get time delta
-        current_time = msg.header.stamp
+        current_time = accel_msg.header.stamp
         if self.last_time is not None:
             dt = (current_time.sec - self.last_time.sec) + \
                  (current_time.nanosec - self.last_time.nanosec) * 1e-9
@@ -176,9 +205,7 @@ class IMUNode(Node):
             pose_msg.pose.orientation.z = self.orientation[3]
             
             self.pose_pub.publish(pose_msg)
-            
-            # if np.linalg.norm(self.gyro_lpf) > self.gyro_threshold or np.linalg.norm(accel_world) > self.accel_threshold:
-            #     self.get_logger().info(f'Motion detected - Pos: {self.position}, Vel: {self.velocity}, Accel: {accel_world}')
+            self.pose_pub_count += 1
         
         self.last_time = current_time
 

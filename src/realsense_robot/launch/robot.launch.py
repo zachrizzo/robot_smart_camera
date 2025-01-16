@@ -78,8 +78,7 @@ def generate_launch_description():
             'std_ratio': 1.5
         }],
         remappings=[
-            ('/camera/pointcloud', '/camera/camera/depth/color/points'),
-            ('/camera/pose', '/camera/camera/pose')
+            ('/camera/pointcloud', '/camera/camera/depth/color/points')
         ]
     )
     

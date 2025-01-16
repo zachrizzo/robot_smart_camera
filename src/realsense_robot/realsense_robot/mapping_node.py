@@ -15,7 +15,7 @@ class MappingNode(Node):
         
         # Initialize subscribers with best effort QoS for better real-time performance
         qos = rclpy.qos.QoSProfile(
-            reliability=rclpy.qos.QoSReliabilityPolicy.BEST_EFFORT,
+            reliability=rclpy.qos.QoSReliabilityPolicy.RELIABLE,
             history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
@@ -27,11 +27,18 @@ class MappingNode(Node):
             qos
         )
         
+        # Use best effort QoS for pose data
+        pose_qos = rclpy.qos.QoSProfile(
+            reliability=rclpy.qos.QoSReliabilityPolicy.BEST_EFFORT,
+            history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        
         self.pose_sub = self.create_subscription(
             PoseStamped,
-            '/camera/camera/pose',
+            '/camera/pose',
             self.pose_callback,
-            qos
+            pose_qos
         )
         
         # Initialize publisher for the global map
@@ -44,44 +51,61 @@ class MappingNode(Node):
         # Initialize variables
         self.current_pose = None
         self.global_pcd = o3d.geometry.PointCloud()
-        self.max_points = 500000  # Reduced to prevent memory issues
-        self.voxel_size = 0.02    # Increased voxel size for better performance
+        self.max_points = 1000000  # Increased to allow more points
+        self.voxel_size = 0.01    # Decreased for higher detail
         
         # Parameters for outlier removal
-        self.nb_neighbors = 30  # Increased for better noise removal
-        self.std_ratio = 1.5    # Reduced for more aggressive outlier removal
+        self.nb_neighbors = 20  # Decreased to handle sparser point clouds
+        self.std_ratio = 2.0    # Increased to be less aggressive
         
         # Create timer for publishing global map
         self.create_timer(0.2, self.publish_map)  # Reduced to 5Hz for better performance
         
         self.get_logger().info('Mapping node initialized with topics:')
         self.get_logger().info(f' - Point cloud input: /camera/camera/depth/color/points')
-        self.get_logger().info(f' - Pose input: /camera/camera/pose')
+        self.get_logger().info(f' - Pose input: /camera/pose')
         self.get_logger().info(f' - Map output: /map/pointcloud')
         
     def pointcloud_callback(self, msg):
         if self.current_pose is None:
-            self.get_logger().debug('No pose data received yet, skipping point cloud')
+            self.get_logger().info('No pose data received yet, skipping point cloud')
             return
             
         try:
+            self.get_logger().info(f'Processing point cloud with size: {msg.width}x{msg.height}')
             # Convert ROS PointCloud2 to numpy array
             field_names = [field.name for field in msg.fields]
+            self.get_logger().info(f'Point cloud fields: {field_names}')
             cloud_data = point_cloud2.read_points(msg, field_names=field_names, skip_nans=True)
             points = np.array(list(cloud_data))
             
             if len(points) == 0:
-                self.get_logger().debug('Received empty point cloud')
+                self.get_logger().info('Received empty point cloud')
                 return
                 
+            self.get_logger().info(f'Converted point cloud with {len(points)} points')
+            
             # Create Open3D point cloud
             pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(points[:, :3])
+            # Reshape points array if it's 1-dimensional
+            if len(points.shape) == 1:
+                # Assuming the points are stored as a structured array
+                xyz = np.zeros((len(points), 3))
+                xyz[:, 0] = points['x']
+                xyz[:, 1] = points['y']
+                xyz[:, 2] = points['z']
+            else:
+                xyz = points[:, :3]
+            pcd.points = o3d.utility.Vector3dVector(xyz)
             
             # Check if RGB data is available
             rgb_idx = [i for i, name in enumerate(field_names) if name in ['rgb', 'rgba']]
             if rgb_idx:
-                rgb = points[:, rgb_idx[0]].copy()
+                self.get_logger().info('RGB data found, adding colors')
+                if len(points.shape) == 1:
+                    rgb = points['rgb']
+                else:
+                    rgb = points[:, rgb_idx[0]]
                 rgb.dtype = np.uint32
                 r = (rgb >> 16) & 0x0000ff
                 g = (rgb >> 8) & 0x0000ff
@@ -94,6 +118,8 @@ class MappingNode(Node):
                 nb_neighbors=self.nb_neighbors,
                 std_ratio=self.std_ratio
             )
+            
+            self.get_logger().info(f'After outlier removal: {len(pcd.points)} points')
             
             # Transform point cloud to global frame using current pose
             T = np.eye(4)
@@ -111,11 +137,13 @@ class MappingNode(Node):
             # Merge with global point cloud
             if len(self.global_pcd.points) == 0:
                 self.global_pcd = pcd
+                self.get_logger().info('Initialized global map')
             else:
                 # Voxel downsample before merging to reduce memory usage
                 pcd = pcd.voxel_down_sample(voxel_size=self.voxel_size)
                 self.global_pcd += pcd
                 self.global_pcd = self.global_pcd.voxel_down_sample(voxel_size=self.voxel_size)
+                self.get_logger().info(f'Updated global map, now has {len(self.global_pcd.points)} points')
             
             # Limit total number of points
             if len(self.global_pcd.points) > self.max_points:
@@ -133,6 +161,7 @@ class MappingNode(Node):
         
     def pose_callback(self, msg):
         self.current_pose = msg.pose
+        self.get_logger().info(f'Received pose: position=({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}, {msg.pose.position.z:.3f})')
         
     def publish_map(self):
         if len(self.global_pcd.points) == 0:
