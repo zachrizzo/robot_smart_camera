@@ -51,40 +51,87 @@ class MappingNode(Node):
         # Initialize variables
         self.current_pose = None
         self.global_pcd = o3d.geometry.PointCloud()
-        self.max_points = 1000000  # Increased to allow more points
-        self.voxel_size = 0.01    # Decreased for higher detail
+        self.previous_pcd = None
+        self.max_points = 500000  # Reduced for better performance
+        self.voxel_size = 0.02    # Increased slightly for better merging
         
         # Parameters for outlier removal
-        self.nb_neighbors = 20  # Decreased to handle sparser point clouds
-        self.std_ratio = 2.0    # Increased to be less aggressive
+        self.nb_neighbors = 30     # Increased for better noise removal
+        self.std_ratio = 1.5      # More aggressive outlier removal
+        
+        # Parameters for radius outlier removal
+        self.radius = 0.05        # 5cm radius
+        self.min_points = 10      # Minimum points in radius
+        
+        # ICP parameters
+        self.icp_threshold = 0.05  # 5cm threshold for ICP
+        self.icp_iterations = 50   # Maximum ICP iterations
         
         # Create timer for publishing global map
-        self.create_timer(0.2, self.publish_map)  # Reduced to 5Hz for better performance
+        self.create_timer(0.2, self.publish_map)
         
-        self.get_logger().info('Mapping node initialized with topics:')
-        self.get_logger().info(f' - Point cloud input: /camera/camera/depth/color/points')
-        self.get_logger().info(f' - Pose input: /camera/pose')
-        self.get_logger().info(f' - Map output: /map/pointcloud')
+        self.get_logger().info('Mapping node initialized with optimized parameters')
         
+    def filter_point_cloud(self, pcd):
+        """Apply multiple filtering steps to clean the point cloud."""
+        # Voxel downsampling
+        pcd = pcd.voxel_down_sample(voxel_size=self.voxel_size)
+        
+        # Statistical outlier removal
+        pcd, _ = pcd.remove_statistical_outlier(
+            nb_neighbors=self.nb_neighbors,
+            std_ratio=self.std_ratio
+        )
+        
+        # Radius outlier removal
+        pcd, _ = pcd.remove_radius_outlier(
+            nb_points=self.min_points,
+            radius=self.radius
+        )
+        
+        return pcd
+        
+    def register_point_cloud(self, source, target):
+        """Register two point clouds using ICP."""
+        if len(source.points) < 10 or len(target.points) < 10:
+            return source, np.eye(4)
+            
+        # Estimate normals if they don't exist
+        if not source.has_normals():
+            source.estimate_normals(
+                search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30)
+            )
+        if not target.has_normals():
+            target.estimate_normals(
+                search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30)
+            )
+            
+        # Perform ICP
+        result = o3d.pipelines.registration.registration_icp(
+            source, target,
+            self.icp_threshold,
+            np.eye(4),
+            o3d.pipelines.registration.TransformationEstimationPointToPlane(),
+            o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=self.icp_iterations)
+        )
+        
+        # Transform the source point cloud
+        source.transform(result.transformation)
+        return source, result.transformation
+
     def pointcloud_callback(self, msg):
         if self.current_pose is None:
-            self.get_logger().info('No pose data received yet, skipping point cloud')
             return
             
         try:
-            self.get_logger().info(f'Processing point cloud with size: {msg.width}x{msg.height}')
             # Convert ROS PointCloud2 to numpy array
             field_names = [field.name for field in msg.fields]
-            self.get_logger().info(f'Point cloud fields: {field_names}')
             cloud_data = point_cloud2.read_points(msg, field_names=field_names, skip_nans=True)
             points = np.array(list(cloud_data))
             
             if len(points) == 0:
-                self.get_logger().info('Received empty point cloud')
                 return
                 
-            self.get_logger().info(f'Converted point cloud with {len(points)} points')
-            
             # Create Open3D point cloud
             pcd = o3d.geometry.PointCloud()
             # Reshape points array if it's 1-dimensional
@@ -101,7 +148,6 @@ class MappingNode(Node):
             # Check if RGB data is available
             rgb_idx = [i for i, name in enumerate(field_names) if name in ['rgb', 'rgba']]
             if rgb_idx:
-                self.get_logger().info('RGB data found, adding colors')
                 if len(points.shape) == 1:
                     rgb = points['rgb']
                 else:
@@ -113,15 +159,10 @@ class MappingNode(Node):
                 colors = np.vstack([r, g, b]).T.astype(np.float64) / 255.0
                 pcd.colors = o3d.utility.Vector3dVector(colors)
             
-            # Remove outliers
-            pcd, _ = pcd.remove_statistical_outlier(
-                nb_neighbors=self.nb_neighbors,
-                std_ratio=self.std_ratio
-            )
+            # Initial filtering of new point cloud
+            pcd = self.filter_point_cloud(pcd)
             
-            self.get_logger().info(f'After outlier removal: {len(pcd.points)} points')
-            
-            # Transform point cloud to global frame using current pose
+            # Transform to global frame using pose
             T = np.eye(4)
             T[:3, 3] = [self.current_pose.position.x,
                         self.current_pose.position.y,
@@ -131,30 +172,33 @@ class MappingNode(Node):
                  self.current_pose.orientation.y,
                  self.current_pose.orientation.z]
             T[:3, :3] = o3d.geometry.get_rotation_matrix_from_quaternion(q)
-            
             pcd.transform(T)
             
-            # Merge with global point cloud
+            # Register with global map if it exists
+            if len(self.global_pcd.points) > 0:
+                pcd, transform = self.register_point_cloud(pcd, self.global_pcd)
+                self.get_logger().info(f'ICP registration fitness: {transform[0, 0]:.3f}')
+            
+            # Merge with global map
             if len(self.global_pcd.points) == 0:
                 self.global_pcd = pcd
-                self.get_logger().info('Initialized global map')
             else:
-                # Voxel downsample before merging to reduce memory usage
-                pcd = pcd.voxel_down_sample(voxel_size=self.voxel_size)
                 self.global_pcd += pcd
-                self.global_pcd = self.global_pcd.voxel_down_sample(voxel_size=self.voxel_size)
-                self.get_logger().info(f'Updated global map, now has {len(self.global_pcd.points)} points')
+                # Filter the combined point cloud
+                self.global_pcd = self.filter_point_cloud(self.global_pcd)
             
             # Limit total number of points
             if len(self.global_pcd.points) > self.max_points:
                 points_np = np.asarray(self.global_pcd.points)
-                indices = np.random.choice(len(points_np), self.max_points, replace=False)
+                # Use uniform sampling instead of random
+                every_nth = len(points_np) // self.max_points
+                indices = np.arange(0, len(points_np), every_nth)[:self.max_points]
                 self.global_pcd.points = o3d.utility.Vector3dVector(points_np[indices])
                 if len(self.global_pcd.colors) > 0:
                     colors_np = np.asarray(self.global_pcd.colors)
                     self.global_pcd.colors = o3d.utility.Vector3dVector(colors_np[indices])
             
-            self.get_logger().debug(f'Updated global map. Total points: {len(self.global_pcd.points)}')
+            self.get_logger().info(f'Updated global map. Total points: {len(self.global_pcd.points)}')
             
         except Exception as e:
             self.get_logger().error(f'Error processing point cloud: {str(e)}')
