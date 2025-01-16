@@ -25,7 +25,13 @@ def generate_launch_description():
             'rgb_camera.profile': '640x480x30',
             'enable_sync': 'true',
             'align_depth.enable': 'true',
-            'pointcloud.enable': 'true'
+            'pointcloud.enable': 'true',
+            'enable_gyro': 'true',
+            'enable_accel': 'true',
+            'gyro_fps': '200',
+            'accel_fps': '200',
+            'unite_imu_method': '1',
+            'motion_module.enable_motion_correction': 'true'
         }.items()
     )
     
@@ -50,6 +56,33 @@ def generate_launch_description():
         output='screen'
     )
     
+    # IMU node
+    imu_node = Node(
+        package='realsense_robot',
+        executable='imu_node.py',
+        name='imu_node',
+        output='screen'
+    )
+    
+    # Mapping node
+    mapping_node = Node(
+        package='realsense_robot',
+        executable='mapping_node.py',
+        name='mapping_node',
+        output='screen',
+        parameters=[{
+            'use_sim_time': False,
+            'max_points': 500000,
+            'voxel_size': 0.02,
+            'nb_neighbors': 30,
+            'std_ratio': 1.5
+        }],
+        remappings=[
+            ('/camera/pointcloud', '/camera/camera/depth/color/points'),
+            ('/camera/pose', '/camera/camera/pose')
+        ]
+    )
+    
     # Web interface node
     web_interface_node = Node(
         package='realsense_robot',
@@ -71,6 +104,8 @@ def generate_launch_description():
         realsense_launch,
         detection_node,
         pointcloud_node,
+        imu_node,
+        mapping_node,
         web_interface_node,
         rviz_node
     ]) 

@@ -18,7 +18,9 @@ setup(
             'realsense_robot/camera_node.py',
             'realsense_robot/pointcloud_node.py',
             'realsense_robot/detection_node.py',
-            'realsense_robot/web_interface.py'
+            'realsense_robot/web_interface.py',
+            'realsense_robot/imu_node.py',
+            'realsense_robot/mapping_node.py'
         ]),
     ],
     install_requires=[
@@ -33,6 +35,10 @@ setup(
         'sensor_msgs',
         'cv_bridge',
         'visualization_msgs',
+        'tf2_ros',
+        'geometry_msgs',
+        'transforms3d',
+        'open3d',
     ],
     zip_safe=True,
     maintainer='user',
@@ -45,6 +51,8 @@ setup(
             'camera_node = realsense_robot.camera_node:main',
             'pointcloud_node = realsense_robot.pointcloud_node:main',
             'detection_node = realsense_robot.detection_node:main',
+            'imu_node = realsense_robot.imu_node:main',
+            'mapping_node = realsense_robot.mapping_node:main',
             'web_interface = realsense_robot.web_interface:main',
         ],
     }

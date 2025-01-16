@@ -100,3 +100,6 @@ realsense_robot/
 
 
 
+I see the issue now. The RealSense camera publishes IMU data on separate topics for accelerometer and gyroscope:
+/camera/camera/accel/sample
+/camera/camera/gyro/sample
