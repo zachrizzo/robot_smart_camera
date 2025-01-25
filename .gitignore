@@ -3,3 +3,4 @@ install/
 librealsense/
 log/
 robot/
+.venv/

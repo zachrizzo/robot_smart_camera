@@ -7,7 +7,7 @@ Panels:
         - /Global Options1
         - /TF1
         - /PointCloud21
-        - /Map1
+        - /PointCloud22
       Splitter Ratio: 0.5
     Tree Height: 549
   - Class: rviz_common/Selection
@@ -42,26 +42,20 @@ Visualization Manager:
         Z: 0
       Plane: XY
       Plane Cell Count: 10
-      Reference Frame: world
+      Reference Frame: map
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        camera_link:
-          Value: true
-        world:
-          Value: true
       Marker Scale: 0.30000001192092896
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
-        world:
-          camera_link:
-            {}
+        {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -82,7 +76,7 @@ Visualization Manager:
       Max Intensity: 4096
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: PointCloud2
+      Name: Camera Point Cloud
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
@@ -92,8 +86,8 @@ Visualization Manager:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /camera/pointcloud
+        Reliability Policy: Reliable
+        Value: /camera/camera/depth/color/points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -115,51 +109,25 @@ Visualization Manager:
       Max Intensity: 4096
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: Map
+      Name: Map Point Cloud
       Position Transformer: XYZ
       Selectable: true
-      Size (Pixels): 2
+      Size (Pixels): 5
       Size (m): 0.009999999776482582
       Style: Points
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /map/pointcloud
+        Reliability Policy: Reliable
+        Value: /rtabmap/cloud_map
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
-    - Class: rviz_default_plugins/Image
-      Enabled: true
-      Max Value: 1
-      Median window: 5
-      Min Value: 0
-      Name: Image
-      Normalize Range: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /camera/detection/image
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /camera/detection/markers
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: world
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -215,7 +183,7 @@ Visualization Manager:
       Name: Current View
       Near Clip Distance: 0.009999999776482582
       Pitch: 0.785398006439209
-      Target Frame: world
+      Target Frame: map
       Value: Orbit (rviz)
       Yaw: 0.785398006439209
 Window Geometry:

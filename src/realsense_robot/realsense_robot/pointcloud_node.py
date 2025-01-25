@@ -34,6 +34,15 @@ class PointCloudGenerator(Node):
         
         self.get_logger().info('Point cloud generator node initialized')
     
+    def correct_point_axes(self, x, y, z):
+        """Convert from camera frame to world frame."""
+        # Camera: x=right, y=down, z=forward
+        # World: x=forward, y=left, z=up
+        world_x = z       # camera z -> world x (forward)
+        world_y = -x      # camera -x -> world y (left)
+        world_z = -y      # camera -y -> world z (up)
+        return world_x, world_y, world_z
+    
     def callback(self, depth_msg, color_msg, info_msg):
         try:
             # Convert images to numpy arrays
@@ -54,10 +63,13 @@ class PointCloudGenerator(Node):
                 for u in range(0, width, 2):
                     depth = float(depth_image[v, u]) / 1000.0  # Convert to meters
                     if depth > 0:
-                        # Calculate 3D point
+                        # Calculate 3D point in camera frame
                         x = (u - cx) * depth / fx
                         y = (v - cy) * depth / fy
                         z = depth
+                        
+                        # Convert to world frame
+                        x, y, z = self.correct_point_axes(x, y, z)
                         
                         # Get color
                         b, g, r = color_image[v, u]
@@ -77,6 +89,7 @@ class PointCloudGenerator(Node):
             ]
             
             header = depth_msg.header
+            header.frame_id = 'world'  # Set frame to world
             pc_msg = pc2.create_cloud(header, fields, points)
             
             # Publish point cloud
