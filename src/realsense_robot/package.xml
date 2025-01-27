@@ -3,9 +3,11 @@
 <package format="3">
   <name>realsense_robot</name>
   <version>0.0.1</version>
-  <description>RealSense robot package with point cloud and object detection</description>
+  <description>RealSense robot package with RTAB-Map integration</description>
   <maintainer email="user@todo.todo">user</maintainer>
   <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
@@ -16,6 +18,11 @@
   <depend>realsense2_camera_msgs</depend>
   <depend>message_filters</depend>
   <depend>sensor_msgs_py</depend>
+  <depend>rtabmap_ros</depend>
+  <depend>rtabmap_odom</depend>
+  <depend>rtabmap_slam</depend>
+  <depend>tf2_ros</depend>
+  <depend>geometry_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
@@ -23,6 +30,6 @@
   <test_depend>python3-pytest</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package> 

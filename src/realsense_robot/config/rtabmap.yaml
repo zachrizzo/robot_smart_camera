@@ -1,4 +1,4 @@
-/rtabmap:
+rtabmap:
   ros__parameters:
     frame_id: "camera_link"
     odom_frame_id: "odom"
@@ -21,46 +21,52 @@
     qos_image: 2
     qos_imu: 2
 
+    # IMU parameters
+    Imu/FilteringStrategy: 1  # Madgwick filter
+    Imu/MadgwickGain: 0.1
+    Imu/MadgwickZeta: 0.0
+    Imu/GravityNorm: 9.81
+    
     # Memory / SLAM
-    Mem.IncrementalMemory: true
-    Mem.InitWMWithAllNodes: true
-    Mem.STMSize: 30
-    Mem.UseOdomFeatures: true
-    Mem.RehearsalSimilarity: 0.2
-    Mem.ImageKept: true
-    Mem.NotLinkedNodesKept: true
-    Mem.CreateIntermediateNodes: true
-    Mem.BadSignaturesIgnored: true
+    Mem/IncrementalMemory: true
+    Mem/InitWMWithAllNodes: true
+    Mem/STMSize: 30
+    Mem/UseOdomFeatures: true
+    Mem/RehearsalSimilarity: 0.2
+    Mem/ImageKept: true
+    Mem/NotLinkedNodesKept: true
+    Mem/CreateIntermediateNodes: true
+    Mem/BadSignaturesIgnored: true
     
     # Loop closure
-    RGBD.LoopClosureReextractFeatures: true
-    RGBD.OptimizeFromGraphEnd: true
-    RGBD.OptimizeMaxError: 1.0
-    Optimizer.Strategy: 1
-    Optimizer.Iterations: 20
-    Optimizer.Epsilon: 0.001
+    RGBD/LoopClosureReextractFeatures: true
+    RGBD/OptimizeFromGraphEnd: true
+    RGBD/OptimizeMaxError: 1.0
+    Optimizer/Strategy: 1
+    Optimizer/Iterations: 20
+    Optimizer/Epsilon: 0.001
     
     # Visual odometry
-    Vis.EstimationType: 1
-    Vis.MaxDepth: 10.0
-    Vis.MinInliers: 20
-    Vis.InlierDistance: 0.1
-    Vis.RefineIterations: 5
+    Vis/EstimationType: 1  # PnP
+    Vis/MaxDepth: 10.0
+    Vis/MinInliers: 20
+    Vis/InlierDistance: 0.1
+    Vis/RefineIterations: 5
     
     # Feature detection
-    GFTT.MinDistance: 10
-    GFTT.QualityLevel: 0.001
-    GFTT.BlockSize: 3
-    GFTT.UseHarrisDetector: true
-    GFTT.K: 0.04
+    GFTT/MinDistance: 10
+    GFTT/QualityLevel: 0.001
+    GFTT/BlockSize: 3
+    GFTT/UseHarrisDetector: true
+    GFTT/K: 0.04
 
     # Local mapping
-    RGBD.ProximityBySpace: true
-    RGBD.LinearUpdate: 0.1
-    RGBD.AngularUpdate: 0.1
-    RGBD.MaxDepth: 3.0
-    RGBD.MinDepth: 0.2
-    RGBD.NeighborLinkRefining: true
+    RGBD/ProximityBySpace: true
+    RGBD/LinearUpdate: 0.1
+    RGBD/AngularUpdate: 0.1
+    RGBD/MaxDepth: 3.0
+    RGBD/MinDepth: 0.2
+    RGBD/NeighborLinkRefining: true
 
     # Local cloud filtering
     cloud_decimation: 2
@@ -72,21 +78,21 @@
     cloud_filter_min_neighbors: 2
 
     # 3D grid map
-    Grid.FromDepth: false
-    Grid.RayTracing: true
-    Grid.3D: true
-    Grid.MapFrameProjection: false
-    Grid.Enabled: true
-    Grid.RangeMax: 4.0
-    Grid.CellSize: 0.05
-    Grid.ClusterRadius: 0.1
-    Grid.GroundIsObstacle: false
-    Grid.NoiseFilteringRadius: 0.05
-    Grid.NoiseFilteringMinNeighbors: 5
+    Grid/FromDepth: false
+    Grid/RayTracing: true
+    Grid/3D: true
+    Grid/MapFrameProjection: false
+    Grid/Enabled: true
+    Grid/RangeMax: 4.0
+    Grid/CellSize: 0.05
+    Grid/ClusterRadius: 0.1
+    Grid/GroundIsObstacle: false
+    Grid/NoiseFilteringRadius: 0.05
+    Grid/NoiseFilteringMinNeighbors: 5
 
     # Global assembled point cloud
-    Cloud.Assemble: true
-    Cloud.Regenerate: true
-    Cloud.Voxel: 0.01
+    Cloud/Assemble: true
+    Cloud/Regenerate: true
+    Cloud/Voxel: 0.01
 
     use_sim_time: false 

@@ -18,6 +18,7 @@ transforms3d = ">=0.4.2"
 pyquaternion = ">=0.9.9"
 scipy = ">=1.15.1"
 llsd = ">=0.1.0"
+catkin-pkg = "^1.0.0"
 
 [build-system]
 requires = ["poetry-core"]

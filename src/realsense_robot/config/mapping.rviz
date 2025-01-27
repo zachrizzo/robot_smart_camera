@@ -5,8 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /TF1
-        - /Map1
+        - /TF1/Frames1
         - /MapCloud1
         - /MapGraph1
       Splitter Ratio: 0.5
@@ -44,27 +43,6 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 10
       Reference Frame: map
-      Value: true
-    - Alpha: 0.699999988079071
-      Class: rviz_default_plugins/Map
-      Color Scheme: map
-      Draw Behind: false
-      Enabled: true
-      Name: Map
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /map
-      Update Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /map_updates
-      Use Timestamp: false
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
@@ -175,6 +153,27 @@ Visualization Manager:
         Value: /camera/camera/depth/color/points
       Use Fixed Frame: true
       Use rainbow: true
+      Value: true
+    - Alpha: 0.699999988079071
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /rtabmap/grid_map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /rtabmap/grid_map_updates
+      Use Timestamp: false
       Value: true
   Enabled: true
   Global Options:

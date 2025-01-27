@@ -1,4 +1,4 @@
-/rtabmap_odometry:
+rtabmap_odometry:
   ros__parameters:
     frame_id: "camera_link"
     odom_frame_id: "odom"
@@ -12,32 +12,37 @@
     qos_image: 2
     qos_imu: 2
 
+    # IMU parameters
+    Imu/FilteringStrategy: 0  # 0=None
+    Imu/LinearVelocity: true
+    Imu/MaxGyroBias: 0.01
+
     # Visual Odometry
-    Odom.Strategy: 0
-    Odom.GuessMotion: true
-    Odom.FillInfoData: true
-    Odom.ResetCountdown: 0
-    Odom.ImageBufferSize: 1
-    Odom.FilteringStrategy: 1
-    Odom.ParticleSize: 400
-    Odom.ParticleNoiseT: 0.002
-    Odom.ParticleNoiseR: 0.002
+    Odom/Strategy: 1  # 1=IMU
+    Odom/GuessMotion: true
+    Odom/FillInfoData: true
+    Odom/ResetCountdown: 0
+    Odom/ImageBufferSize: 1
+    Odom/FilteringStrategy: 1
+    Odom/ParticleSize: 400
+    Odom/ParticleNoiseT: 0.002
+    Odom/ParticleNoiseR: 0.002
 
     # Feature Detection
-    Vis.FeatureType: 6
-    Vis.MaxFeatures: 1000
-    Vis.MinInliers: 20
-    Vis.InlierDistance: 0.1
-    Vis.RefineIterations: 5
-    Vis.MaxDepth: 10.0
-    Vis.MinDepth: 0.2
+    Vis/FeatureType: 6  # GFTT/FREAK
+    Vis/MaxFeatures: 1000
+    Vis/MinInliers: 20
+    Vis/InlierDistance: 0.1
+    Vis/RefineIterations: 5
+    Vis/MaxDepth: 10.0
+    Vis/MinDepth: 0.2
     
     # GFTT parameters
-    GFTT.MinDistance: 5
-    GFTT.QualityLevel: 0.001
-    GFTT.BlockSize: 3
-    GFTT.UseHarrisDetector: true
-    GFTT.K: 0.04
-    GFTT.MaxFeatures: 500
+    GFTT/MinDistance: 5
+    GFTT/QualityLevel: 0.001
+    GFTT/BlockSize: 3
+    GFTT/UseHarrisDetector: true
+    GFTT/K: 0.04
+    GFTT/MaxFeatures: 500
 
     use_sim_time: false 

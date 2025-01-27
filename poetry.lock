@@ -61,6 +61,27 @@ files = [
 ]
 
 [[package]]
+name = "catkin-pkg"
+version = "1.0.0"
+description = "catkin package library"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "catkin_pkg-1.0.0-py3-none-any.whl", hash = "sha256:10a6589e9edf3cd5bd18e35e094d20b516e6351bcf0da891c28a0ff526fdb7cc"},
+    {file = "catkin_pkg-1.0.0.tar.gz", hash = "sha256:476e9f52917282f464739241b4bcaf5ebbfba9a7a68d9af8f875225feac0e1b5"},
+]
+
+[package.dependencies]
+docutils = "*"
+pyparsing = "*"
+python-dateutil = "*"
+setuptools = "*"
+
+[package.extras]
+test = ["flake8", "flake8-blind-except", "flake8-builtins", "flake8-class-newline", "flake8-comprehensions", "flake8-deprecated", "flake8-docstrings", "flake8-import-order", "flake8-quotes", "pytest"]
+
+[[package]]
 name = "certifi"
 version = "2024.12.14"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -406,6 +427,18 @@ groups = ["main"]
 files = [
     {file = "decorator-5.1.1-py3-none-any.whl", hash = "sha256:b8c3f85900b9dc423225913c5aace94729fe1fa9763b38939a95226f02d37186"},
     {file = "decorator-5.1.1.tar.gz", hash = "sha256:637996211036b6385ef91435e4fae22989472f9d571faba8927ba8253acbc330"},
+]
+
+[[package]]
+name = "docutils"
+version = "0.21.2"
+description = "Docutils -- Python Documentation Utilities"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "docutils-0.21.2-py3-none-any.whl", hash = "sha256:dafca5b9e384f0e419294eb4d2ff9fa826435bf15f15b7bd45723e8ad76811b2"},
+    {file = "docutils-0.21.2.tar.gz", hash = "sha256:3a6b18732edf182daa3cd12775bbb338cf5691468f91eeeb109deff6ebfa986f"},
 ]
 
 [[package]]
@@ -2749,4 +2782,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "481beb60bbc0bbeb9d58b5638e9b9902b9349a11c36f9593daf0055ce387f671"
+content-hash = "d9f269539a15323fa502446fd0867bbc0177ed02d5bea713840b132135401006"
