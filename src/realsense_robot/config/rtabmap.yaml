@@ -13,11 +13,12 @@ rtabmap:
     subscribe_depth: true
     subscribe_rgb: true
     subscribe_scan: false
-    subscribe_odom_info: true
+    subscribe_odom: true
+    subscribe_imu: true
     subscribe_user_data: false
-    subscribe_scan_cloud: true
-    approx_sync: true
-    queue_size: 30
+    subscribe_scan_cloud: false
+    approx_sync: false
+    queue_size: 10
     qos_image: 2
     qos_imu: 2
 
@@ -78,12 +79,12 @@ rtabmap:
     cloud_filter_min_neighbors: 2
 
     # 3D grid map
-    Grid/FromDepth: false
+    Grid/FromDepth: true
     Grid/RayTracing: true
     Grid/3D: true
     Grid/MapFrameProjection: false
     Grid/Enabled: true
-    Grid/RangeMax: 4.0
+    Grid/RangeMax: 5.0
     Grid/CellSize: 0.05
     Grid/ClusterRadius: 0.1
     Grid/GroundIsObstacle: false

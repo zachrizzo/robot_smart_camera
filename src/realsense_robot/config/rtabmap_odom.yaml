@@ -7,42 +7,43 @@ rtabmap_odometry:
     tf_tolerance: 0.5
     wait_for_transform: 0.2
     wait_imu_to_init: true
-    approx_sync: true
-    queue_size: 30
+    approx_sync: false
+    queue_size: 5
     qos_image: 2
     qos_imu: 2
 
     # IMU parameters
-    Imu/FilteringStrategy: 0  # 0=None
-    Imu/LinearVelocity: true
-    Imu/MaxGyroBias: 0.01
+    Imu/FilteringStrategy: "0"  # 0=None
+    Imu/LinearVelocity: "true"
+    Imu/MaxGyroBias: "0.01"
 
     # Visual Odometry
-    Odom/Strategy: 1  # 1=IMU
-    Odom/GuessMotion: true
-    Odom/FillInfoData: true
-    Odom/ResetCountdown: 0
-    Odom/ImageBufferSize: 1
-    Odom/FilteringStrategy: 1
-    Odom/ParticleSize: 400
-    Odom/ParticleNoiseT: 0.002
-    Odom/ParticleNoiseR: 0.002
+    Odom/Strategy: "1"  # 1=IMU
+    Odom/GuessMotion: "true"
+    Odom/FillInfoData: "true"
+    Odom/MinInliers: "8"  # Reduced from 10
+    Odom/RoiRatios: "0.03 0.03 0.03 0.03"
+    Odom/MaxFeatures: "1000"
+    Odom/KeyFrameThr: "0.3"
+    Odom/MaxWords: "400"
+    Odom/MaxDepth: "3.5"
+    Odom/MinDepth: "0.3"
 
     # Feature Detection
-    Vis/FeatureType: 6  # GFTT/FREAK
-    Vis/MaxFeatures: 1000
-    Vis/MinInliers: 20
-    Vis/InlierDistance: 0.1
-    Vis/RefineIterations: 5
-    Vis/MaxDepth: 10.0
-    Vis/MinDepth: 0.2
-    
-    # GFTT parameters
-    GFTT/MinDistance: 5
-    GFTT/QualityLevel: 0.001
-    GFTT/BlockSize: 3
-    GFTT/UseHarrisDetector: true
-    GFTT/K: 0.04
-    GFTT/MaxFeatures: 500
+    Vis/FeatureType: "6"   # GFTT/BRIEF=6
+    Vis/MaxFeatures: "1000"
+    Vis/EstimationType: "1"  # 0=3D->3D, 1=3D->2D (PnP), 2=2D->2D (Epipolar Geometry)
+    Vis/InlierDistance: "0.1"
+    Vis/RefineIterations: "5"
+    Vis/PnPFlags: "1"  # 0=ITERATIVE, 1=EPNP, 2=P3P
+    Vis/PnPReprojError: "2"
+    Vis/MinInliers: "8"  # Added minimum inliers for PnP
+
+    # GFTT detector
+    GFTT/MinDistance: "5"
+    GFTT/QualityLevel: "0.001"
+    GFTT/BlockSize: "3"
+    GFTT/UseHarrisDetector: "false"
+    GFTT/K: "0.04"
 
     use_sim_time: false 
