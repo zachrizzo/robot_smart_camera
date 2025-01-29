@@ -118,6 +118,14 @@ def generate_launch_description():
             output='screen'
         ),
 
+        # Object Detection node
+        Node(
+            package='realsense_robot',
+            executable='detection_node',
+            name='detection_node',
+            output='screen'
+        ),
+
         # RViz
         Node(
             package='rviz2',

@@ -11,6 +11,8 @@ Panels:
         - /Map1
         - /Odom Local Map1
         - /Camera Cloud1
+        - /Detection Image1
+        - /Detection Markers1
       Splitter Ratio: 0.5147058963775635
     Tree Height: 480
   - Class: rviz_common/Selection
@@ -256,6 +258,32 @@ Visualization Manager:
         Value: /cloud_map
       Use Fixed Frame: true
       Use rainbow: true
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Detection Image
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /detection_image
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Detection Markers
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /detection_markers
       Value: true
   Enabled: true
   Global Options:
