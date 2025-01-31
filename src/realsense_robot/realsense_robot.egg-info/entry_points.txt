@@ -1,5 +1,9 @@
 [console_scripts]
+agent_node = realsense_robot.ai_agent.agent_node:main
 camera_node = realsense_robot.camera_node:main
 detection_node = realsense_robot.detection_node:main
+imu_node = realsense_robot.imu_node:main
+mapping_node = realsense_robot.mapping_node:main
+pico_servo_node = realsense_robot.pico_servo_node:main
 pointcloud_node = realsense_robot.pointcloud_node:main
 web_interface = realsense_robot.web_interface:main

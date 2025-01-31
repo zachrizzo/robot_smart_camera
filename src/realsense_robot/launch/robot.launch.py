@@ -126,6 +126,14 @@ def generate_launch_description():
             output='screen'
         ),
 
+        # AI Agent Node for voice control and scene description
+        Node(
+            package='realsense_robot',
+            executable='agent_node',
+            name='agent_node',
+            output='screen'
+        ),
+
         # RViz
         Node(
             package='rviz2',

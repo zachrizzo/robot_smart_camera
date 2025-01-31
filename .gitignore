@@ -4,3 +4,4 @@ librealsense/
 log/
 robot/
 .venv/
+.env

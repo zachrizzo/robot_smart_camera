@@ -1,21 +1,26 @@
 Metadata-Version: 2.2
 Name: realsense_robot
 Version: 0.0.1
-Summary: RealSense robot package with point cloud and object detection
+Summary: ROS2 package for RealSense camera with AI capabilities
 Maintainer: user
 Maintainer-email: user@todo.todo
 License: TODO: License declaration
 Requires-Dist: setuptools
-Requires-Dist: numpy
-Requires-Dist: opencv-python
-Requires-Dist: torch
-Requires-Dist: torchvision
-Requires-Dist: ultralytics
-Requires-Dist: pyrealsense2
-Requires-Dist: rclpy
-Requires-Dist: sensor_msgs
-Requires-Dist: cv_bridge
-Requires-Dist: visualization_msgs
+Requires-Dist: opencv-python>=4.5.0
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: transforms3d
+Requires-Dist: aiohttp>=3.9.0
+Requires-Dist: websockets>=10.0
+Requires-Dist: pyserial>=3.5
+Requires-Dist: ultralytics>=8.0.196
+Requires-Dist: langchain>=0.1.0
+Requires-Dist: langchain-core>=0.1.0
+Requires-Dist: langchain-anthropic>=0.1.0
+Requires-Dist: langchain-openai>=0.0.8
+Requires-Dist: langgraph>=0.0.27
+Requires-Dist: anthropic>=0.18.1
+Requires-Dist: openai>=1.14.0
+Requires-Dist: ollama>=0.1.6
 Dynamic: license
 Dynamic: maintainer
 Dynamic: maintainer-email

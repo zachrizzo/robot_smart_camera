@@ -1,16 +1,32 @@
 [tool.poetry]
 name = "realsense-robot"
 version = "0.1.0"
-description = "ROS2 package for RealSense camera with RTAB-Map"
+description = "ROS2 package for RealSense camera with AI capabilities"
 authors = ["Zach"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
+# LangChain and Graph Dependencies
+langchain = "^0.1.12"
+langchain-core = "^0.1.32"
+langchain-anthropic = "^0.1.4"
+langchain-openai = "^0.0.8"
+langgraph = "^0.0.27"
+langsmith = "^0.1.22"
+
+# LLM Providers
+anthropic = "^0.18.1"
+openai = "^1.14.1"
+ollama = "^0.1.6"
+
+# Deep Learning Dependencies
 torch = "2.2.1"
 torchvision = "0.17.1"
 torchaudio = "2.2.1"
 ultralytics = "8.3.61"
+
+# Computer Vision and 3D
 open3d = ">=0.19.0"
 numpy = "<2.0"
 opencv-python = ">=4.10.0"
