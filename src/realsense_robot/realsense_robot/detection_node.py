@@ -12,11 +12,13 @@ from sensor_msgs.msg import PointCloud2, Image, CameraInfo
 from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
 import sensor_msgs_py.point_cloud2 as pc2
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, TransformStamped
 from std_msgs.msg import ColorRGBA
 import struct
 from collections import defaultdict
 from ultralytics import YOLO
+import tf2_ros
+import random
 
 class DetectionNode(Node):
     def __init__(self):
@@ -39,8 +41,8 @@ class DetectionNode(Node):
         self.latest_depth_frame = None
         self.camera_info = None
         
-        # Store detected objects with their positions
-        self.detected_objects = defaultdict(list)  # {class_name: [(x, y, z, confidence), ...]}
+        # Store detected objects with their positions and timestamps
+        self.detected_objects = defaultdict(list)  # {class_name: [(x, y, z, confidence, last_update_time), ...]}
         self.next_marker_id = 0
         
         # Initialize YOLO model
@@ -48,28 +50,38 @@ class DetectionNode(Node):
         self.model = YOLO('yolov8n.pt')
         self.get_logger().info('YOLO model loaded successfully')
         
-        # Define colors for different classes (BGR format)
-        self.class_colors = {
-            'person': (0, 0, 255),    # Red
-            'car': (255, 0, 0),       # Blue
-            'truck': (255, 128, 0),   # Light Blue
-            'bicycle': (0, 255, 0),   # Green
-            'motorcycle': (0, 255, 255), # Yellow
-            'dog': (128, 0, 255),     # Purple
-            'cat': (255, 0, 255),     # Pink
-            'chair': (128, 128, 0),   # Teal
-            'laptop': (0, 128, 255),  # Orange
-            'cell phone': (128, 0, 128) # Dark Purple
-        }
+        # Initialize TF2 buffer and listener
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         
-        # Set confidence threshold
+        # Random color generator for classes
+        self.class_colors = {}
+        
+        # Set parameters
         self.confidence_threshold = 0.85
+        self.distance_filter_threshold = 0.5  # 50cm threshold for position updates
+        self.depth_filter_window = 5  # Number of depth values to average
+        self.depth_max_distance = 5.0  # Maximum valid depth in meters
+        self.position_update_alpha = 0.2  # Position update smoothing factor (reduced for more stability)
+        self.min_update_interval = 1.0  # Minimum time between position updates (seconds)
+        self.object_timeout = 5.0  # Time before removing an object that hasn't been seen (seconds)
         
         # Create timer for processing frames
-        self.create_timer(1/30, self.process_frame)  # 30 Hz
+        self.create_timer(1/15, self.process_frame)  # Reduced to 15 Hz for stability
         
         # Create timer for publishing persistent markers
-        self.create_timer(1.0, self.publish_persistent_markers)  # 1 Hz
+        self.create_timer(0.1, self.publish_persistent_markers)  # Increased to 10 Hz for smoother updates
+    
+    def get_random_color(self, class_name):
+        if class_name not in self.class_colors:
+            # Generate random BGR color
+            color = (
+                random.randint(50, 255),
+                random.randint(50, 255),
+                random.randint(50, 255)
+            )
+            self.class_colors[class_name] = color
+        return self.class_colors[class_name]
     
     def camera_info_callback(self, msg):
         self.camera_info = msg
@@ -86,10 +98,31 @@ class DetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error converting depth image: {str(e)}')
     
+    def filter_depth(self, depth_frame, center_x, center_y):
+        """Apply median filtering to depth values around the center point"""
+        window_size = 5
+        half_size = window_size // 2
+        
+        # Extract depth window
+        y_start = max(0, center_y - half_size)
+        y_end = min(depth_frame.shape[0], center_y + half_size + 1)
+        x_start = max(0, center_x - half_size)
+        x_end = min(depth_frame.shape[1], center_x + half_size + 1)
+        
+        depth_window = depth_frame[y_start:y_end, x_start:x_end]
+        
+        # Filter out zeros and invalid depths
+        valid_depths = depth_window[(depth_window > 0) & (depth_window < self.depth_max_distance * 1000)]
+        
+        if len(valid_depths) > 0:
+            # Return median of valid depths
+            return np.median(valid_depths) / 1000.0  # Convert to meters
+        return None
+    
     def create_marker(self, position, class_name, confidence, marker_id, is_persistent=False):
         marker = Marker()
         marker.header.stamp = self.get_clock().now().to_msg()
-        marker.header.frame_id = "map"  # Changed to map frame for persistence
+        marker.header.frame_id = "map"
         marker.ns = "detections"
         marker.id = marker_id
         marker.type = Marker.CUBE
@@ -105,18 +138,18 @@ class DetectionNode(Node):
         marker.scale.y = 0.2
         marker.scale.z = 0.2
         
-        # Set marker color based on class
-        color = self.class_colors.get(class_name, (128, 128, 128))  # Default to gray if class not found
-        marker.color.r = color[2] / 255.0  # Convert BGR to RGB
+        # Get color for this class
+        color = self.get_random_color(class_name)
+        marker.color.r = color[2] / 255.0
         marker.color.g = color[1] / 255.0
         marker.color.b = color[0] / 255.0
         marker.color.a = 0.8
         
         # Set marker lifetime
         if is_persistent:
-            marker.lifetime.sec = 0  # Persistent
+            marker.lifetime.sec = 2  # Keep markers visible for 2 seconds even if not updated
         else:
-            marker.lifetime.sec = 1  # Short-lived for current detections
+            marker.lifetime.sec = 1
         
         # Add text marker
         text_marker = Marker()
@@ -138,35 +171,128 @@ class DetectionNode(Node):
         return [marker, text_marker]
     
     def update_detected_object(self, class_name, position, confidence):
+        current_time = self.get_clock().now().to_msg().sec
+        
         # Only update if confidence is above threshold
         if confidence < self.confidence_threshold:
             return
             
-        # Check if we already have a similar detection nearby
+        position_np = np.array(position)
         similar_found = False
-        for i, (pos, conf) in enumerate(self.detected_objects[class_name]):
-            dist = np.sqrt(sum((np.array(position) - np.array(pos))**2))
-            if dist < 0.3:  # 30cm threshold for considering it the same object
-                # Update position with moving average
-                alpha = 0.3
-                new_pos = tuple(alpha * np.array(position) + (1 - alpha) * np.array(pos))
-                new_conf = max(confidence, conf)
-                self.detected_objects[class_name][i] = (new_pos, new_conf)
-                similar_found = True
-                break
+        min_dist = float('inf')
+        best_match_idx = -1
         
-        if not similar_found:
-            self.detected_objects[class_name].append((position, confidence))
+        # Clean up old detections first
+        self.detected_objects[class_name] = [
+            (pos, conf, time) for pos, conf, time in self.detected_objects[class_name]
+            if (current_time - time) < self.object_timeout
+        ]
+        
+        # Find the closest existing detection
+        for i, (pos, conf, last_update) in enumerate(self.detected_objects[class_name]):
+            pos_np = np.array(pos)
+            dist = np.sqrt(np.sum((position_np - pos_np)**2))
+            
+            if dist < min_dist:
+                min_dist = dist
+                best_match_idx = i
+        
+        # Update existing detection if close enough and enough time has passed
+        if min_dist < self.distance_filter_threshold:
+            pos, conf, last_update = self.detected_objects[class_name][best_match_idx]
+            
+            # Only update if enough time has passed or confidence is significantly higher
+            if (current_time - last_update) >= self.min_update_interval or confidence > conf + 0.1:
+                pos_np = np.array(pos)
+                
+                # Update position with stronger weight to previous position
+                new_pos = tuple(
+                    self.position_update_alpha * position_np + 
+                    (1 - self.position_update_alpha) * pos_np
+                )
+                
+                # Use max confidence
+                new_conf = max(confidence, conf)
+                
+                self.detected_objects[class_name][best_match_idx] = (new_pos, new_conf, current_time)
+            similar_found = True
+        
+        # Add new detection if no similar object found and confidence is high
+        if not similar_found and confidence > self.confidence_threshold + 0.05:
+            self.detected_objects[class_name].append((tuple(position), confidence, current_time))
+    
+    def transform_point_to_map(self, point_camera):
+        try:
+            # Look up transform from camera to map
+            transform = self.tf_buffer.lookup_transform(
+                'map',
+                'camera_color_optical_frame',
+                rclpy.time.Time(),
+                rclpy.duration.Duration(seconds=1.0)
+            )
+            
+            # Extract translation
+            trans = transform.transform.translation
+            rot = transform.transform.rotation
+            
+            # Convert quaternion to rotation matrix
+            # Quaternion to rotation matrix conversion
+            qw = rot.w
+            qx = rot.x
+            qy = rot.y
+            qz = rot.z
+            
+            # First row of the rotation matrix
+            r00 = 1 - 2 * (qy * qy + qz * qz)
+            r01 = 2 * (qx * qy - qz * qw)
+            r02 = 2 * (qx * qz + qy * qw)
+            
+            # Second row of the rotation matrix
+            r10 = 2 * (qx * qy + qz * qw)
+            r11 = 1 - 2 * (qx * qx + qz * qz)
+            r12 = 2 * (qy * qz - qx * qw)
+            
+            # Third row of the rotation matrix
+            r20 = 2 * (qx * qz - qy * qw)
+            r21 = 2 * (qy * qz + qx * qw)
+            r22 = 1 - 2 * (qx * qx + qy * qy)
+            
+            # Apply rotation and translation
+            # Remember: camera optical frame has z forward, x right, y down
+            # Convert from camera optical frame to map frame
+            x = point_camera[0]  # camera x (right)
+            y = point_camera[1]  # camera y (down)
+            z = point_camera[2]  # camera z (forward)
+            
+            # Apply rotation
+            px = r00 * x + r01 * y + r02 * z
+            py = r10 * x + r11 * y + r12 * z
+            pz = r20 * x + r21 * y + r22 * z
+            
+            # Apply translation
+            point_map = [
+                px + trans.x,
+                py + trans.y,
+                pz + trans.z
+            ]
+            
+            return point_map
+            
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            self.get_logger().warn(f'TF Error: {str(e)}')
+            return None
     
     def publish_persistent_markers(self):
+        current_time = self.get_clock().now().to_msg().sec
         marker_array = MarkerArray()
         
-        # Add all persistent detections
+        # Add all persistent detections that haven't timed out
         for class_name, detections in self.detected_objects.items():
-            for position, confidence in detections:
-                markers = self.create_marker(position, class_name, confidence, self.next_marker_id, True)
-                marker_array.markers.extend(markers)
-                self.next_marker_id += 1
+            for position, confidence, last_update in detections:
+                if (current_time - last_update) < self.object_timeout:
+                    markers = self.create_marker(position, class_name, confidence, self.next_marker_id, True)
+                    marker_array.markers.extend(markers)
+                    self.next_marker_id += 1
         
         if len(marker_array.markers) > 0:
             self.marker_pub.publish(marker_array)
@@ -207,7 +333,7 @@ class DetectionNode(Node):
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     
                     # Get color for this class
-                    color = self.class_colors.get(class_name, (128, 128, 128))
+                    color = self.get_random_color(class_name)
                     
                     # Draw bounding box and label
                     cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
@@ -219,11 +345,11 @@ class DetectionNode(Node):
                     center_y = (y1 + y2) // 2
                     
                     try:
-                        # Get depth value (in meters)
-                        depth = self.latest_depth_frame[center_y, center_x] / 1000.0  # Convert mm to meters
+                        # Get filtered depth value (in meters)
+                        depth = self.filter_depth(self.latest_depth_frame, center_x, center_y)
                         
-                        if depth > 0:
-                            # Convert to 3D point
+                        if depth is not None and depth > 0:
+                            # Convert to 3D point in camera frame
                             fx = self.camera_info.k[0]  # focal length x
                             fy = self.camera_info.k[4]  # focal length y
                             cx = self.camera_info.k[2]  # optical center x
@@ -234,16 +360,17 @@ class DetectionNode(Node):
                             y = (center_y - cy) * depth / fy
                             z = depth
                             
-                            # Convert to map frame coordinates
-                            position = (z, -x, -y)  # Simple conversion for visualization
+                            # Transform point to map frame
+                            point_map = self.transform_point_to_map([x, y, z])
                             
-                            # Update detected objects
-                            self.update_detected_object(class_name, position, confidence)
-                            
-                            # Create current detection markers
-                            markers = self.create_marker(position, class_name, confidence, self.next_marker_id)
-                            marker_array.markers.extend(markers)
-                            self.next_marker_id += 1
+                            if point_map is not None:
+                                # Update detected objects
+                                self.update_detected_object(class_name, point_map, confidence)
+                                
+                                # Create current detection markers
+                                markers = self.create_marker(point_map, class_name, confidence, self.next_marker_id)
+                                marker_array.markers.extend(markers)
+                                self.next_marker_id += 1
                             
                     except Exception as e:
                         self.get_logger().warn(f"Error processing detection: {e}")
