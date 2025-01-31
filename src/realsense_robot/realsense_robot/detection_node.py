@@ -32,7 +32,7 @@ class DetectionNode(Node):
         # Create publishers
         self.marker_pub = self.create_publisher(MarkerArray, '/detection_markers', 10)
         self.image_pub = self.create_publisher(Image, '/detection_image', 10)
-        self.objects_pub = self.create_publisher(String, '/detection/objects', 10)  # New publisher for object info
+        self.objects_pub = self.create_publisher(String, '/detection/objects', 10)
         
         # Initialize CvBridge
         self.bridge = CvBridge()
@@ -45,6 +45,10 @@ class DetectionNode(Node):
         # Store detected objects with their positions and timestamps
         self.detected_objects = defaultdict(list)  # {class_name: [(x, y, z, confidence, last_update_time), ...]}
         self.next_marker_id = 0
+        
+        # Detection history for temporal smoothing
+        self.detection_history = defaultdict(list)  # {class_name: [list of recent detections]}
+        self.history_duration = 1.0  # Keep 1 second of history
         
         # Initialize YOLO model
         self.get_logger().info('Loading YOLO model...')
@@ -63,15 +67,16 @@ class DetectionNode(Node):
         self.distance_filter_threshold = 0.5  # 50cm threshold for position updates
         self.depth_filter_window = 5  # Number of depth values to average
         self.depth_max_distance = 5.0  # Maximum valid depth in meters
-        self.position_update_alpha = 0.2  # Position update smoothing factor (reduced for more stability)
-        self.min_update_interval = 1.0  # Minimum time between position updates (seconds)
-        self.object_timeout = 5.0  # Time before removing an object that hasn't been seen (seconds)
+        self.position_update_alpha = 0.2  # Position update smoothing factor
+        self.min_update_interval = 0.2  # Minimum time between position updates (seconds)
+        self.object_timeout = 0.5  # Time before removing an object that hasn't been seen (seconds)
+        self.spatial_clustering_threshold = 0.3  # 30cm threshold for clustering same-class objects
         
         # Create timer for processing frames
-        self.create_timer(1/15, self.process_frame)  # Reduced to 15 Hz for stability
+        self.create_timer(1/15, self.process_frame)  # 15 Hz for stability
         
         # Create timer for publishing persistent markers
-        self.create_timer(0.1, self.publish_persistent_markers)  # Increased to 10 Hz for smoother updates
+        self.create_timer(0.1, self.publish_persistent_markers)  # 10 Hz for smooth visualization
     
     def get_random_color(self, class_name):
         if class_name not in self.class_colors:
@@ -298,6 +303,93 @@ class DetectionNode(Node):
         if len(marker_array.markers) > 0:
             self.marker_pub.publish(marker_array)
     
+    def cluster_detections(self, detections, class_name):
+        """Cluster nearby detections of the same class"""
+        if not detections:
+            return []
+            
+        clusters = []
+        for det in detections:
+            det_pos = np.array(det['position'])
+            added_to_cluster = False
+            
+            # Try to add to existing cluster
+            for cluster in clusters:
+                cluster_center = np.mean([np.array(d['position']) for d in cluster], axis=0)
+                distance = np.linalg.norm(det_pos - cluster_center)
+                
+                if distance < self.spatial_clustering_threshold:
+                    cluster.append(det)
+                    added_to_cluster = True
+                    break
+            
+            # Create new cluster if needed
+            if not added_to_cluster:
+                clusters.append([det])
+        
+        # Merge cluster information
+        merged_detections = []
+        for cluster in clusters:
+            # Average position and confidence
+            avg_pos = np.mean([np.array(d['position']) for d in cluster], axis=0)
+            avg_conf = np.mean([d['confidence'] for d in cluster])
+            avg_dist = np.mean([d['distance'] for d in cluster])
+            
+            merged_detections.append({
+                'distance': avg_dist,
+                'position': tuple(avg_pos),
+                'confidence': avg_conf
+            })
+        
+        return merged_detections
+
+    def update_detection_history(self, detection_info):
+        """Update detection history with temporal smoothing"""
+        current_time = self.get_clock().now().to_msg().sec
+        
+        # Update history with new detections
+        for class_name, detections in detection_info.items():
+            # Cluster detections first
+            clustered_detections = self.cluster_detections(detections, class_name)
+            
+            # Add to history with timestamp
+            self.detection_history[class_name].append({
+                'timestamp': current_time,
+                'detections': clustered_detections
+            })
+        
+        # Remove old history entries
+        for class_name in list(self.detection_history.keys()):
+            self.detection_history[class_name] = [
+                h for h in self.detection_history[class_name]
+                if (current_time - h['timestamp']) < self.history_duration
+            ]
+            
+            # Remove empty class entries
+            if not self.detection_history[class_name]:
+                del self.detection_history[class_name]
+
+    def get_smoothed_detections(self):
+        """Get temporally smoothed detections"""
+        smoothed_info = defaultdict(list)
+        current_time = self.get_clock().now().to_msg().sec
+        
+        for class_name, history in self.detection_history.items():
+            if not history:
+                continue
+            
+            # Get recent detections
+            recent_detections = []
+            for h in history:
+                if (current_time - h['timestamp']) < self.object_timeout:
+                    recent_detections.extend(h['detections'])
+            
+            if recent_detections:
+                # Cluster recent detections
+                smoothed_info[class_name] = self.cluster_detections(recent_detections, class_name)
+        
+        return smoothed_info
+
     def process_frame(self):
         if any(x is None for x in [self.latest_color_frame, self.latest_depth_frame, self.camera_info]):
             return
@@ -312,7 +404,7 @@ class DetectionNode(Node):
             # Create marker array for current detections
             marker_array = MarkerArray()
             
-            # Dictionary to count detections by class and store distances
+            # Dictionary to store detection information
             detection_info = defaultdict(list)
             
             # Process results
@@ -327,65 +419,45 @@ class DetectionNode(Node):
                     # Skip if confidence is below threshold
                     if confidence < self.confidence_threshold:
                         continue
-                        
-                    # Get bounding box coordinates
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
                     
-                    # Get color for this class
-                    color = self.get_random_color(class_name)
-                    
-                    # Draw bounding box and label
-                    cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(vis_frame, f'{class_name} {confidence:.2f}', (x1, y1 - 10),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                    
-                    # Get center point
-                    center_x = (x1 + x2) // 2
-                    center_y = (y1 + y2) // 2
-                    
+                    # Process detection and get 3D position
                     try:
-                        # Get filtered depth value (in meters)
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        center_x = (x1 + x2) // 2
+                        center_y = (y1 + y2) // 2
+                        
                         depth = self.filter_depth(self.latest_depth_frame, center_x, center_y)
                         
                         if depth is not None and depth > 0:
-                            # Convert to 3D point in camera frame
-                            fx = self.camera_info.k[0]  # focal length x
-                            fy = self.camera_info.k[4]  # focal length y
-                            cx = self.camera_info.k[2]  # optical center x
-                            cy = self.camera_info.k[5]  # optical center y
-                            
-                            # Calculate 3D point in camera frame
-                            x = (center_x - cx) * depth / fx
-                            y = (center_y - cy) * depth / fy
-                            z = depth
-                            
-                            # Transform point to map frame
-                            point_map = self.transform_point_to_map([x, y, z])
+                            point_map = self.get_3d_point(center_x, center_y, depth)
                             
                             if point_map is not None:
-                                # Store detection info
                                 detection_info[class_name].append({
                                     'distance': depth,
                                     'position': point_map,
                                     'confidence': confidence
                                 })
                                 
-                                # Update detected objects
-                                self.update_detected_object(class_name, point_map, confidence)
+                                # Draw visualization
+                                color = self.get_random_color(class_name)
+                                cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
+                                cv2.putText(vis_frame, f'{class_name} {depth:.2f}m', (x1, y1 - 10),
+                                          cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                                 
-                                # Create current detection markers
-                                markers = self.create_marker(point_map, class_name, confidence, self.next_marker_id)
-                                marker_array.markers.extend(markers)
-                                self.next_marker_id += 1
-                            
                     except Exception as e:
                         self.get_logger().warn(f"Error processing detection: {e}")
             
+            # Update detection history with temporal smoothing
+            self.update_detection_history(detection_info)
+            
+            # Get smoothed detections
+            smoothed_detections = self.get_smoothed_detections()
+            
             # Publish detection info
-            if detection_info:
+            if smoothed_detections:
                 info_msg = String()
                 info_str = ""
-                for obj_class, detections in detection_info.items():
+                for obj_class, detections in smoothed_detections.items():
                     for det in detections:
                         dist = det['distance']
                         pos = det['position']
@@ -394,12 +466,7 @@ class DetectionNode(Node):
                 info_msg.data = info_str
                 self.objects_pub.publish(info_msg)
             
-            # Log detection counts
-            if detection_info:
-                log_msg = "Detected: " + ", ".join([f"{len(dets)} {cls}" for cls, dets in detection_info.items()])
-                self.get_logger().info(log_msg)
-            
-            # Publish the annotated image
+            # Publish visualization
             try:
                 if vis_frame is not None:
                     img_msg = self.bridge.cv2_to_imgmsg(vis_frame, "bgr8")
@@ -409,12 +476,28 @@ class DetectionNode(Node):
             except Exception as e:
                 self.get_logger().error(f'Error publishing image: {e}')
             
-            # Publish current detection markers
-            if len(marker_array.markers) > 0:
-                self.marker_pub.publish(marker_array)
+        except Exception as e:
+            self.get_logger().error(f"Error in process_frame: {str(e)}")
+
+    def get_3d_point(self, center_x, center_y, depth):
+        """Convert pixel coordinates and depth to 3D point in map frame"""
+        try:
+            fx = self.camera_info.k[0]
+            fy = self.camera_info.k[4]
+            cx = self.camera_info.k[2]
+            cy = self.camera_info.k[5]
+            
+            # Calculate 3D point in camera frame
+            x = (center_x - cx) * depth / fx
+            y = (center_y - cy) * depth / fy
+            z = depth
+            
+            # Transform to map frame
+            return self.transform_point_to_map([x, y, z])
             
         except Exception as e:
-            self.get_logger().error(f"Error in process_frame: {e}")
+            self.get_logger().warn(f"Error calculating 3D point: {e}")
+            return None
 
 def main():
     rclpy.init()
