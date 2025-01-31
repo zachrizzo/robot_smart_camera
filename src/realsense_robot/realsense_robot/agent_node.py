@@ -21,6 +21,9 @@ class AgentNode(Node):
         # Message queue for async processing
         self.message_queue = Queue()
         
+        # Store latest detection information
+        self.latest_detections = ""
+        
         # Declare parameters
         self.declare_parameter('anthropic_api_key', os.getenv('ANTHROPIC_API_KEY', ''))
         self.declare_parameter('openai_api_key', os.getenv('OPENAI_API_KEY', ''))
@@ -41,6 +44,12 @@ class AgentNode(Node):
             String,
             '/agent/switch',
             self.switch_agent_callback,
+            10
+        )
+        self.detections_sub = self.create_subscription(
+            String,
+            '/detection/objects',
+            self.detections_callback,
             10
         )
         
@@ -109,6 +118,19 @@ class AgentNode(Node):
         self.status_pub.publish(status_msg)
         self._publish_status()
         
+    def detections_callback(self, msg: String):
+        """Store latest detection information"""
+        self.latest_detections = msg.data
+        
+    async def _process_message(self, content: str) -> str:
+        """Process a message with context about detected objects"""
+        # Always include the latest detection information in the context
+        if self.latest_detections:
+            context = f"Current object detections from the robot's camera:\n{self.latest_detections}\n\nUser question: {content}"
+            return await self.agent_system.process_message(context)
+        
+        return await self.agent_system.process_message(content)
+        
     def _run_async_loop(self):
         """Run the async event loop in a separate thread"""
         loop = asyncio.new_event_loop()
@@ -123,7 +145,7 @@ class AgentNode(Node):
                     if msg_type == 'chat':
                         # Process chat message
                         response = loop.run_until_complete(
-                            self.agent_system.process_message(content)
+                            self._process_message(content)
                         )
                         
                         # Publish response

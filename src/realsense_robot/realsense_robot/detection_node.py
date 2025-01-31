@@ -13,7 +13,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
 import sensor_msgs_py.point_cloud2 as pc2
 from geometry_msgs.msg import Point, TransformStamped
-from std_msgs.msg import ColorRGBA
+from std_msgs.msg import ColorRGBA, String
 import struct
 from collections import defaultdict
 from ultralytics import YOLO
@@ -32,6 +32,7 @@ class DetectionNode(Node):
         # Create publishers
         self.marker_pub = self.create_publisher(MarkerArray, '/detection_markers', 10)
         self.image_pub = self.create_publisher(Image, '/detection_image', 10)
+        self.objects_pub = self.create_publisher(String, '/detection/objects', 10)  # New publisher for object info
         
         # Initialize CvBridge
         self.bridge = CvBridge()
@@ -311,8 +312,8 @@ class DetectionNode(Node):
             # Create marker array for current detections
             marker_array = MarkerArray()
             
-            # Dictionary to count detections by class
-            detection_counts = defaultdict(int)
+            # Dictionary to count detections by class and store distances
+            detection_info = defaultdict(list)
             
             # Process results
             for result in results:
@@ -327,8 +328,6 @@ class DetectionNode(Node):
                     if confidence < self.confidence_threshold:
                         continue
                         
-                    detection_counts[class_name] += 1
-                    
                     # Get bounding box coordinates
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     
@@ -364,6 +363,13 @@ class DetectionNode(Node):
                             point_map = self.transform_point_to_map([x, y, z])
                             
                             if point_map is not None:
+                                # Store detection info
+                                detection_info[class_name].append({
+                                    'distance': depth,
+                                    'position': point_map,
+                                    'confidence': confidence
+                                })
+                                
                                 # Update detected objects
                                 self.update_detected_object(class_name, point_map, confidence)
                                 
@@ -375,9 +381,22 @@ class DetectionNode(Node):
                     except Exception as e:
                         self.get_logger().warn(f"Error processing detection: {e}")
             
+            # Publish detection info
+            if detection_info:
+                info_msg = String()
+                info_str = ""
+                for obj_class, detections in detection_info.items():
+                    for det in detections:
+                        dist = det['distance']
+                        pos = det['position']
+                        conf = det['confidence']
+                        info_str += f"{obj_class}: {dist:.2f}m away at position ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}) with {conf:.2f} confidence\n"
+                info_msg.data = info_str
+                self.objects_pub.publish(info_msg)
+            
             # Log detection counts
-            if detection_counts:
-                log_msg = "Detected: " + ", ".join([f"{count} {cls}" for cls, count in detection_counts.items()])
+            if detection_info:
+                log_msg = "Detected: " + ", ".join([f"{len(dets)} {cls}" for cls, dets in detection_info.items()])
                 self.get_logger().info(log_msg)
             
             # Publish the annotated image

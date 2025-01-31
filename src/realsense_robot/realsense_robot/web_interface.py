@@ -195,23 +195,50 @@ class WebInterface(Node):
     
     async def video_feed_handler(self, request):
         """Handle video feed requests"""
-        response = web.StreamResponse()
-        response.content_type = 'multipart/x-mixed-replace; boundary=frame'
-        await response.prepare(request)
-        
         try:
+            self.get_logger().info('New video feed connection')
+            response = web.StreamResponse()
+            response.content_type = 'multipart/x-mixed-replace; boundary=frame'
+            await response.prepare(request)
+            
+            frame_timeout = 1.0  # 1 second timeout for getting a frame
+            
             while True:
-                frame = self.get_frame()
-                if frame is not None:
-                    _, jpeg = cv2.imencode('.jpg', frame)
-                    await response.write(
-                        b'--frame\r\n'
-                        b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n'
-                    )
-                await asyncio.sleep(0.033)  # ~30 fps
+                try:
+                    frame = self.get_frame()
+                    if frame is not None:
+                        _, jpeg = cv2.imencode('.jpg', frame)
+                        await response.write(
+                            b'--frame\r\n'
+                            b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n'
+                        )
+                    else:
+                        self.get_logger().warn('No frame available')
+                        # Send a blank frame to keep connection alive
+                        blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                        _, jpeg = cv2.imencode('.jpg', blank_frame)
+                        await response.write(
+                            b'--frame\r\n'
+                            b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n'
+                        )
+                    
+                    # Add a small delay to control frame rate
+                    await asyncio.sleep(0.033)  # ~30 fps
+                    
+                except asyncio.CancelledError:
+                    self.get_logger().info('Video feed cancelled')
+                    break
+                except Exception as e:
+                    self.get_logger().error(f'Error in video feed loop: {str(e)}')
+                    await asyncio.sleep(1.0)  # Wait before retrying
+                    
         except ConnectionResetError:
-            pass
-        
+            self.get_logger().info('Client disconnected from video feed')
+        except Exception as e:
+            self.get_logger().error(f'Error in video feed handler: {str(e)}')
+        finally:
+            self.get_logger().info('Video feed connection closed')
+            
         return response
 
 def spin_ros(node):
@@ -225,23 +252,80 @@ def spin_ros(node):
 
 async def init_web_app(node):
     """Initialize and run the web application"""
-    # Create web application
-    app = web.Application()
-    
-    # Add routes
-    static_path = os.path.join(os.path.dirname(__file__), 'static')
-    app.router.add_get('/', lambda r: web.FileResponse(os.path.join(static_path, 'index.html')))
-    app.router.add_get('/video_feed', node.video_feed_handler)
-    app.router.add_get('/ws', node.websocket_handler)
-    app.router.add_static('/static', static_path)
-    
-    # Start web server
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8000)
-    await site.start()
-    
-    return runner, site
+    try:
+        node.get_logger().info('Starting web application initialization...')
+        
+        # Create web application
+        app = web.Application()
+        node.get_logger().info('Created web application')
+        
+        # Add routes
+        static_path = os.path.join(os.path.dirname(__file__), 'static')
+        node.get_logger().info(f'Using static path: {static_path}')
+        
+        if not os.path.exists(static_path):
+            node.get_logger().error(f'Static directory not found at: {static_path}')
+            os.makedirs(static_path, exist_ok=True)
+            node.get_logger().info(f'Created static directory')
+            
+        if not os.path.exists(os.path.join(static_path, 'index.html')):
+            node.get_logger().error('index.html not found!')
+            # Create a basic index.html if it doesn't exist
+            with open(os.path.join(static_path, 'index.html'), 'w') as f:
+                f.write("""
+                <!DOCTYPE html>
+                <html>
+                <head><title>Robot Interface</title></head>
+                <body>
+                    <h1>Robot Interface</h1>
+                    <img src="/video_feed" width="640" height="480" />
+                    <div id="chat">
+                        <div id="messages"></div>
+                        <input type="text" id="message" />
+                        <button onclick="sendMessage()">Send</button>
+                    </div>
+                    <script>
+                        const ws = new WebSocket('ws://' + window.location.host + '/ws');
+                        ws.onmessage = function(event) {
+                            const msg = JSON.parse(event.data);
+                            const messages = document.getElementById('messages');
+                            messages.innerHTML += '<p>' + msg.content + '</p>';
+                        };
+                        function sendMessage() {
+                            const input = document.getElementById('message');
+                            ws.send(JSON.stringify({
+                                type: 'user_input',
+                                content: input.value
+                            }));
+                            input.value = '';
+                        }
+                    </script>
+                </body>
+                </html>
+                """)
+            node.get_logger().info('Created basic index.html')
+        
+        app.router.add_get('/', lambda r: web.FileResponse(os.path.join(static_path, 'index.html')))
+        app.router.add_get('/video_feed', node.video_feed_handler)
+        app.router.add_get('/ws', node.websocket_handler)
+        app.router.add_static('/static', static_path)
+        node.get_logger().info('Added all routes')
+        
+        # Start web server
+        runner = web.AppRunner(app)
+        await runner.setup()
+        node.get_logger().info('Set up AppRunner')
+        
+        site = web.TCPSite(runner, '0.0.0.0', 8000)
+        node.get_logger().info('Created TCPSite, starting server...')
+        await site.start()
+        node.get_logger().info('Web server started successfully')
+        
+        return runner, site
+        
+    except Exception as e:
+        node.get_logger().error(f'Error in init_web_app: {str(e)}')
+        raise
 
 def main():
     # Initialize ROS
@@ -254,19 +338,25 @@ def main():
         
         # Create node with event loop
         node = WebInterface(loop)
+        node.get_logger().info('Created WebInterface node')
         
         # Start ROS spinning in a separate thread
         ros_thread = threading.Thread(target=spin_ros, args=(node,), daemon=True)
         ros_thread.start()
+        node.get_logger().info('Started ROS spin thread')
         
         # Run web application in the event loop
         runner = None
         try:
+            node.get_logger().info('Starting web application...')
             runner, site = loop.run_until_complete(init_web_app(node))
             node.get_logger().info('Web server started at http://0.0.0.0:8000')
             loop.run_forever()
         except KeyboardInterrupt:
             node.get_logger().info('Shutting down...')
+        except Exception as e:
+            node.get_logger().error(f'Error starting web application: {str(e)}')
+            raise
         finally:
             if runner:
                 loop.run_until_complete(runner.cleanup())
