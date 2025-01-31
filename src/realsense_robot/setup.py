@@ -16,6 +16,7 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*')),
         ('lib/' + package_name, glob('scripts/*')),
+        (os.path.join('lib', package_name, 'static'), glob('realsense_robot/static/*')),
     ],
     install_requires=[
         'setuptools',

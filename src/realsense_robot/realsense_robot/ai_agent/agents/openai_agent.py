@@ -3,7 +3,7 @@ from openai import AsyncOpenAI
 from .base_agent import BaseAgent
 
 class OpenAIAgent(BaseAgent):
-    def __init__(self, model_name: str = "gpt-4-turbo-preview", api_key: Optional[str] = None):
+    def __init__(self, model_name: str = "gpt-4o-mini", api_key: Optional[str] = None):
         super().__init__(model_name, api_key)
         self.client = AsyncOpenAI(api_key=api_key)
         

@@ -3,7 +3,7 @@ import anthropic
 from .base_agent import BaseAgent
 
 class ClaudeAgent(BaseAgent):
-    def __init__(self, model_name: str = "claude-3-sonnet-20240229", api_key: Optional[str] = None):
+    def __init__(self, model_name: str = "claude-3-5-haiku-20241022", api_key: Optional[str] = None):
         super().__init__(model_name, api_key)
         self.client = anthropic.AsyncAnthropic(api_key=api_key)
         

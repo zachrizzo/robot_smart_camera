@@ -134,6 +134,14 @@ def generate_launch_description():
             output='screen'
         ),
 
+        # Web Interface Node
+        Node(
+            package='realsense_robot',
+            executable='web_interface',
+            name='web_interface',
+            output='screen'
+        ),
+
         # RViz
         Node(
             package='rviz2',

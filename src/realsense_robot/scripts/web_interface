@@ -1,0 +1,2 @@
+#!/bin/bash
+/home/zach/Desktop/robot1/.venv/bin/python3 -m realsense_robot.web_interface "$@" 
