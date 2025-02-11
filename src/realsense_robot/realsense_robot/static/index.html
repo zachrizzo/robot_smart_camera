@@ -1,399 +1,580 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Robot AI Interface</title>
+    <title>AI Voice Chat</title>
     <style>
-        :root {
-            --primary-color: #2196F3;
-            --secondary-color: #1976D2;
-            --background-color: #f5f5f5;
-            --text-color: #333;
-            --message-bg: #fff;
-            --user-message-bg: #E3F2FD;
-            --agent-message-bg: #FFFFFF;
-        }
-
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: var(--background-color);
-            color: var(--text-color);
-        }
-
-        .container {
-            max-width: 1200px;
+            font-family: Arial, sans-serif;
+            max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-            height: 100vh;
+            background-color: #f5f5f5;
         }
-
-        .chat-container {
-            background: var(--message-bg);
+        .container {
+            background-color: white;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
             display: flex;
-            flex-direction: column;
-            height: calc(100vh - 40px);
-        }
-
-        .chat-header {
-            padding: 20px;
-            background: var(--primary-color);
-            color: white;
-            border-radius: 10px 10px 0 0;
-        }
-
-        .chat-header h1 {
-            margin: 0;
-            font-size: 1.5em;
-        }
-
-        .status-bar {
-            padding: 10px 20px;
-            background: var(--secondary-color);
-            color: white;
-            font-size: 0.9em;
-        }
-
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-        }
-
-        .message {
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
-            max-width: 80%;
-            padding: 15px;
-            border-radius: 10px;
-            position: relative;
         }
-
-        .user-message {
-            background: var(--user-message-bg);
-            margin-left: auto;
-            border-bottom-right-radius: 5px;
-        }
-
-        .agent-message {
-            background: var(--agent-message-bg);
-            margin-right: auto;
-            border-bottom-left-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-
-        .chat-input {
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #eee;
-            border-radius: 0 0 10px 10px;
-        }
-
-        .input-group {
+        .agent-selector {
             display: flex;
+            align-items: center;
             gap: 10px;
         }
-
-        input[type="text"] {
-            flex: 1;
-            padding: 15px;
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .audio-controls select {
+            min-width: 200px;
+        }
+        select {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+        .chat-container {
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
-            font-size: 1em;
         }
-
-        button {
-            padding: 15px 30px;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        button:hover {
-            background: var(--secondary-color);
-        }
-
-        .message-time {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 5px;
-        }
-
-        /* Markdown Styling */
-        .message pre {
-            background: #f8f9fa;
+        .message {
+            margin: 10px 0;
             padding: 10px;
             border-radius: 5px;
-            overflow-x: auto;
         }
-
-        .message code {
-            font-family: 'Courier New', Courier, monospace;
-            background: #f8f9fa;
-            padding: 2px 5px;
-            border-radius: 3px;
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 20%;
         }
-
-        /* Loading indicator */
-        .typing-indicator {
-            display: none;
-            padding: 15px;
-            background: var(--agent-message-bg);
-            border-radius: 10px;
-            margin-bottom: 20px;
-            width: fit-content;
+        .assistant-message {
+            background-color: #f5f5f5;
+            margin-right: 20%;
         }
-
-        .typing-indicator span {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            background: var(--primary-color);
-            border-radius: 50%;
-            margin-right: 5px;
-            animation: typing 1s infinite;
-        }
-
-        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-
-        @keyframes typing {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-
-            .message {
-                max-width: 90%;
-            }
-        }
-
-        /* Add to existing styles */
-        .model-selector {
-            padding: 10px 20px;
-            background: var(--secondary-color);
+        .input-container {
             display: flex;
             gap: 10px;
-            justify-content: center;
+            margin-top: 20px;
         }
-
-        .model-btn {
-            padding: 8px 16px;
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #2196f3;
+            color: white;
             border: none;
             border-radius: 5px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
             cursor: pointer;
-            transition: all 0.3s;
+            font-size: 16px;
         }
-
-        .model-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
+        button:hover {
+            background-color: #1976d2;
         }
-
-        .model-btn.active {
-            background: var(--primary-color);
-            font-weight: bold;
+        button:disabled {
+            background-color: #bdbdbd;
+            cursor: not-allowed;
         }
-
-        #send-button {
-            position: relative;
+        #voiceButton {
+            background-color: #4caf50;
         }
-
-        #send-button.loading {
-            background: var(--secondary-color);
-            pointer-events: none;
+        #voiceButton:hover {
+            background-color: #388e3c;
         }
-
-        #send-button.loading::after {
-            content: '';
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            top: 50%;
-            left: 50%;
-            margin: -8px 0 0 -8px;
-            border: 2px solid transparent;
-            border-top-color: white;
-            border-radius: 50%;
-            animation: button-loading-spinner 1s linear infinite;
+        #voiceButton.recording {
+            background-color: #f44336;
         }
-
-        @keyframes button-loading-spinner {
-            from {
-                transform: rotate(0turn);
-            }
-            to {
-                transform: rotate(1turn);
-            }
+        .status {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #666;
+        }
+        .error-message {
+            color: #f44336;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #ffebee;
+            border-radius: 5px;
+            display: none;
+        }
+        .permission-prompt {
+            background-color: #e3f2fd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #2196f3;
+            display: none;
+        }
+        .permission-prompt button {
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="chat-container">
-            <div class="chat-header">
-                <h1>Robot AI Assistant</h1>
+        <div class="header">
+            <h1>AI Voice Chat</h1>
+            <div class="agent-selector">
+                <label for="agentSelect">Agent:</label>
+                <select id="agentSelect" onchange="switchAgent(this.value)">
+                    <!-- Options will be populated dynamically -->
+                </select>
             </div>
-            <div class="status-bar" id="status-bar">
-                Initializing...
-            </div>
-            <div class="model-selector">
-                <button class="model-btn active" data-model="gpt-4">GPT-4</button>
-                <button class="model-btn" data-model="claude-3">Claude 3</button>
-                <button class="model-btn" data-model="local">Local LLM</button>
-            </div>
-            <div class="chat-messages" id="chat-messages">
-                <div class="message agent-message">
-                    Hello! I'm your robot's AI assistant. How can I help you today?
-                </div>
-                <div class="typing-indicator" id="typing-indicator">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            </div>
-            <div class="chat-input">
-                <div class="input-group">
-                    <input type="text" id="user-input" placeholder="Type your message here..." autocomplete="off">
-                    <button onclick="sendMessage()" id="send-button">Send</button>
-                </div>
-            </div>
+        </div>
+        <div class="status" id="status">Connecting...</div>
+        <div class="error-message" id="errorMessage"></div>
+        <div class="permission-prompt" id="permissionPrompt">
+            <p><strong>Microphone access is required for voice chat.</strong></p>
+            <p>Please follow these steps:</p>
+            <ol>
+                <li>Look for the microphone icon in your browser's address bar</li>
+                <li>Click it and select "Allow" for microphone access</li>
+                <li>If you don't see the icon, click the button below to request access</li>
+            </ol>
+            <button onclick="requestMicrophoneAccess()">Request Microphone Access</button>
+        </div>
+        <div class="audio-controls" id="audioControls">
+            <label for="audioSource">Audio Source:</label>
+            <select id="audioSource" onchange="changeAudioSource(this.value)">
+                <option value="">Loading audio devices...</option>
+            </select>
+            <button id="testAudioButton" onclick="testAudioInput()">Test Audio</button>
+        </div>
+        <div class="chat-container" id="chat"></div>
+        <div class="input-container">
+            <input type="text" id="textInput" placeholder="Type your message...">
+            <button onclick="sendText()">Send</button>
+            <button id="voiceButton" onclick="toggleRecording()">
+                Start Recording
+            </button>
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
-        let ws;
-        let currentModel = 'gpt-4';
-        const messagesContainer = document.getElementById('chat-messages');
-        const userInput = document.getElementById('user-input');
-        const statusBar = document.getElementById('status-bar');
-        const typingIndicator = document.getElementById('typing-indicator');
-        const sendButton = document.getElementById('send-button');
+        let socket = io();
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let currentAgent = null;
+        let selectedAudioDevice = null;
+        let audioStream = null;
+        let permissionDenied = false;
 
-        // Model selection
-        document.querySelectorAll('.model-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                document.querySelectorAll('.model-btn').forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-                currentModel = button.dataset.model;
-                // Notify the agent about model change
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'model_change',
-                        content: currentModel
-                    }));
-                }
-            });
-        });
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
 
-        function connect() {
-            ws = new WebSocket('ws://localhost:8000/ws');
-            
-            ws.onopen = () => {
-                console.log('Connected to websocket');
-                statusBar.textContent = 'Connected';
-                sendButton.disabled = false;
-            };
-            
-            ws.onclose = () => {
-                console.log('Disconnected from websocket');
-                statusBar.textContent = 'Disconnected. Reconnecting...';
-                sendButton.disabled = true;
-                setTimeout(connect, 1000);
-            };
-            
-            ws.onmessage = (event) => {
-                console.log('Received message:', event.data);
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log('Parsed message:', data);
-                    
-                    if (data.type === 'agent_response') {
-                        addMessage(data.content, 'agent');
-                        typingIndicator.style.display = 'none';
-                        sendButton.classList.remove('loading');
-                        sendButton.disabled = false;
-                    } else if (data.type === 'agent_status') {
-                        statusBar.textContent = data.content;
-                    } else if (data.type === 'status') {
-                        statusBar.textContent = data.content;
-                    } else if (data.type === 'error') {
-                        console.error('Error from server:', data.content);
-                        statusBar.textContent = 'Error: ' + data.content;
-                        typingIndicator.style.display = 'none';
-                        sendButton.classList.remove('loading');
-                        sendButton.disabled = false;
+        // Connect to server
+        socket.on('connect', () => {
+            document.getElementById('status').textContent = 'Connected';
+            loadAgents();
+            // Check if we already have microphone permission
+            navigator.permissions.query({ name: 'microphone' })
+                .then(permissionStatus => {
+                    if (permissionStatus.state === 'granted') {
+                        loadAudioDevices();
+                    } else if (permissionStatus.state === 'prompt') {
+                        document.getElementById('permissionPrompt').style.display = 'block';
+                    } else if (permissionStatus.state === 'denied') {
+                        showError('Microphone access is blocked. Please update your browser settings to allow microphone access.');
+                        document.getElementById('permissionPrompt').style.display = 'block';
+                        permissionDenied = true;
                     }
-                } catch (error) {
-                    console.error('Error parsing message:', error, event.data);
-                    statusBar.textContent = 'Error processing response';
-                    typingIndicator.style.display = 'none';
-                    sendButton.classList.remove('loading');
-                    sendButton.disabled = false;
-                }
-            };
-        }
-
-        function addMessage(content, sender) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}-message`;
-            
-            // Convert markdown-style code blocks
-            content = content.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-            // Convert inline code
-            content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
-            
-            messageDiv.innerHTML = content;
-            
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'message-time';
-            timeDiv.textContent = new Date().toLocaleTimeString();
-            messageDiv.appendChild(timeDiv);
-            
-            messagesContainer.insertBefore(messageDiv, typingIndicator);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        function sendMessage() {
-            const message = userInput.value.trim();
-            if (message && ws && ws.readyState === WebSocket.OPEN) {
-                addMessage(message, 'user');
-                ws.send(JSON.stringify({
-                    type: 'user_input',
-                    content: message,
-                    model: currentModel
-                }));
-                userInput.value = '';
-                typingIndicator.style.display = 'block';
-                sendButton.classList.add('loading');
-                sendButton.disabled = true;
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-        }
-
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
+                    
+                    permissionStatus.onchange = () => {
+                        if (permissionStatus.state === 'granted') {
+                            loadAudioDevices();
+                        } else {
+                            document.getElementById('permissionPrompt').style.display = 'block';
+                            permissionDenied = true;
+                        }
+                    };
+                });
         });
 
-        // Initial connection
-        connect();
+        socket.on('disconnect', () => {
+            document.getElementById('status').textContent = 'Disconnected';
+        });
+
+        // Handle responses
+        socket.on('text_response', (data) => {
+            addMessage('assistant', data.text);
+        });
+
+        socket.on('audio_response', (data) => {
+            // Play audio response
+            const audio = new Audio('data:audio/mp3;base64,' + data.audio);
+            audio.play();
+        });
+
+        socket.on('error', (data) => {
+            console.error('Error:', data.message);
+            showError(data.message);
+            addMessage('assistant', 'Error: ' + data.message);
+        });
+
+        socket.on('agent_switched', (data) => {
+            currentAgent = data.agent;
+            document.getElementById('status').textContent = `Using ${data.agent}`;
+            // Show/hide audio controls based on agent type
+            const audioControls = document.getElementById('audioControls');
+            const voiceButton = document.getElementById('voiceButton');
+            const isVoiceAgent = data.agent.toLowerCase().includes('voice');
+            audioControls.style.display = isVoiceAgent ? 'flex' : 'none';
+            voiceButton.style.display = isVoiceAgent ? 'block' : 'none';
+        });
+
+        async function loadAgents() {
+            try {
+                const response = await fetch('/agents');
+                const data = await response.json();
+                const select = document.getElementById('agentSelect');
+                select.innerHTML = '';
+                data.agents.forEach(agent => {
+                    const option = document.createElement('option');
+                    option.value = agent.id;
+                    option.textContent = agent.name;
+                    if (agent.name === data.current) {
+                        option.selected = true;
+                        currentAgent = agent.name;
+                    }
+                    select.appendChild(option);
+                });
+                // Initial visibility of voice button
+                const voiceButton = document.getElementById('voiceButton');
+                voiceButton.style.display = currentAgent.toLowerCase().includes('voice') ? 'block' : 'none';
+            } catch (error) {
+                console.error('Error loading agents:', error);
+            }
+        }
+
+        function switchAgent(agentId) {
+            socket.emit('switch_agent', { agent: agentId });
+        }
+
+        function addMessage(role, text) {
+            const chat = document.getElementById('chat');
+            const div = document.createElement('div');
+            div.className = 'message ' + (role === 'user' ? 'user-message' : 'assistant-message');
+            div.textContent = text;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function sendText() {
+            const input = document.getElementById('textInput');
+            const text = input.value.trim();
+            if (text) {
+                socket.emit('text_message', { message: text });
+                addMessage('user', text);
+                input.value = '';
+            }
+        }
+
+        async function requestMicrophoneAccess() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                document.getElementById('permissionPrompt').style.display = 'none';
+                loadAudioDevices();
+            } catch (error) {
+                console.error('Error requesting microphone access:', error);
+                
+                // Detect browser
+                const browser = detectBrowser();
+                let instructions = '';
+                
+                if (browser === 'Chrome') {
+                    instructions = `
+                        To enable microphone in Chrome:
+                        1. Click the lock icon (🔒) in the address bar
+                        2. Click "Site Settings"
+                        3. Find "Microphone" and select "Allow"
+                        4. Refresh this page
+                    `;
+                } else if (browser === 'Firefox') {
+                    instructions = `
+                        To enable microphone in Firefox:
+                        1. Click the lock/shield icon in the address bar
+                        2. Remove the microphone block
+                        3. Click "Allow" when prompted
+                        4. Refresh this page
+                    `;
+                } else if (browser === 'Edge') {
+                    instructions = `
+                        To enable microphone in Edge:
+                        1. Click the lock icon in the address bar
+                        2. Click "Permissions for this site"
+                        3. Enable "Microphone"
+                        4. Refresh this page
+                    `;
+                } else {
+                    instructions = `
+                        To enable microphone access:
+                        1. Look for the lock/site settings icon in your browser's address bar
+                        2. Find and enable microphone permissions
+                        3. Refresh this page
+                    `;
+                }
+                
+                const permissionPrompt = document.getElementById('permissionPrompt');
+                permissionPrompt.innerHTML = `
+                    <p><strong>Microphone access was denied.</strong></p>
+                    <p>Please follow these steps:</p>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px;">${instructions}</pre>
+                    <p>After enabling permissions, click the button below:</p>
+                    <button onclick="requestMicrophoneAccess()">Try Again</button>
+                `;
+                permissionPrompt.style.display = 'block';
+                permissionDenied = true;
+            }
+        }
+
+        function detectBrowser() {
+            const userAgent = navigator.userAgent;
+            if (userAgent.includes('Chrome')) {
+                return 'Chrome';
+            } else if (userAgent.includes('Firefox')) {
+                return 'Firefox';
+            } else if (userAgent.includes('Edge')) {
+                return 'Edge';
+            } else {
+                return 'Unknown';
+            }
+        }
+
+        // Load available audio input devices
+        async function loadAudioDevices() {
+            try {
+                // First check if getUserMedia is available
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Your browser does not support microphone access. Please use a modern browser like Chrome, Firefox, or Edge.');
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                permissionDenied = false;
+                document.getElementById('permissionPrompt').style.display = 'none';
+                    
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioDevices = devices.filter(device => device.kind === 'audioinput');
+                const select = document.getElementById('audioSource');
+                select.innerHTML = '';
+                
+                if (audioDevices.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.text = 'No microphones found';
+                    select.appendChild(option);
+                    showError('No microphones found. Please connect a microphone and reload the page.');
+                    return;
+                }
+                
+                audioDevices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Microphone ${select.length + 1}`;
+                    select.appendChild(option);
+                });
+
+                // Select first device by default if none selected
+                if (!selectedAudioDevice && audioDevices.length > 0) {
+                    selectedAudioDevice = audioDevices[0].deviceId;
+                    select.value = selectedAudioDevice;
+                }
+
+                // Enable voice button if we have a working microphone
+                document.getElementById('voiceButton').disabled = false;
+
+            } catch (error) {
+                console.error('Error loading audio devices:', error);
+                showError('Could not access microphone. Please ensure you have granted microphone permissions.');
+                document.getElementById('permissionPrompt').style.display = 'block';
+                const select = document.getElementById('audioSource');
+                select.innerHTML = '<option value="">Microphone access denied</option>';
+                document.getElementById('voiceButton').disabled = true;
+                permissionDenied = true;
+            }
+        }
+
+        async function changeAudioSource(deviceId) {
+            selectedAudioDevice = deviceId;
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+            }
+            if (mediaRecorder) {
+                mediaRecorder = null;
+            }
+            
+            // Test the new device immediately
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined
+                    }
+                });
+                stream.getTracks().forEach(track => track.stop());
+                document.getElementById('voiceButton').disabled = false;
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                showError('Could not access the selected microphone. Please choose a different device.');
+                document.getElementById('voiceButton').disabled = true;
+            }
+        }
+
+        async function testAudioInput() {
+            try {
+                const button = document.getElementById('testAudioButton');
+                if (button.textContent === 'Stop Test') {
+                    if (audioStream) {
+                        audioStream.getTracks().forEach(track => track.stop());
+                    }
+                    button.textContent = 'Test Audio';
+                    return;
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined
+                    }
+                });
+
+                // Create audio meter
+                const audioContext = new AudioContext();
+                const source = audioContext.createMediaStreamSource(stream);
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                source.connect(analyser);
+
+                button.textContent = 'Stop Test';
+
+                // Visual feedback
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                
+                function updateMeter() {
+                    if (button.textContent !== 'Stop Test') {
+                        audioContext.close();
+                        return;
+                    }
+
+                    analyser.getByteFrequencyData(dataArray);
+                    let sum = 0;
+                    for(let i = 0; i < bufferLength; i++) {
+                        sum += dataArray[i];
+                    }
+                    const average = sum / bufferLength;
+                    
+                    // Update status with audio level
+                    const status = document.getElementById('status');
+                    const level = Math.min(100, Math.round((average / 128) * 100));
+                    status.textContent = `Audio Level: ${level}%`;
+                    
+                    requestAnimationFrame(updateMeter);
+                }
+                
+                updateMeter();
+                
+            } catch (err) {
+                console.error('Error testing audio:', err);
+                alert('Could not access microphone');
+            }
+        }
+
+        async function setupRecording() {
+            try {
+                if (!selectedAudioDevice) {
+                    showError('Please select a microphone first.');
+                    return false;
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined
+                    }
+                });
+                
+                audioStream = stream;
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);
+                    reader.onloadend = () => {
+                        const base64Audio = reader.result.split(',')[1];
+                        socket.emit('audio_data', { audio: base64Audio });
+                    };
+                    audioChunks = [];
+                };
+
+                return true;
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                showError('Could not access microphone. Please ensure you have granted microphone permissions and selected a valid device.');
+                return false;
+            }
+        }
+
+        async function toggleRecording() {
+            const button = document.getElementById('voiceButton');
+            
+            if (!mediaRecorder) {
+                const success = await setupRecording();
+                if (!success) {
+                    alert('Could not access microphone');
+                    return;
+                }
+            }
+
+            if (!isRecording) {
+                mediaRecorder.start();
+                isRecording = true;
+                button.textContent = 'Stop Recording';
+                button.classList.add('recording');
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                button.textContent = 'Start Recording';
+                button.classList.remove('recording');
+            }
+        }
+
+        // Handle enter key in text input
+        document.getElementById('textInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendText();
+            }
+        });
     </script>
 </body>
 </html> 

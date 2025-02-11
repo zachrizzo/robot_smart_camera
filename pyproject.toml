@@ -36,6 +36,18 @@ scipy = ">=1.15.1"
 llsd = ">=0.1.0"
 catkin-pkg = "^1.0.0"
 
+# Web Interface Dependencies
+python-socketio = {version = "^5.11.1", extras = ["asyncio"]}
+flask = "^3.0.2"
+flask-socketio = "^5.3.6"
+flask-cors = "^4.0.0"
+aiortc = "^1.7.0"
+aiohttp = "^3.9.3"
+websockets = "^12.0"
+uvicorn = {version = "^0.27.1", extras = ["standard"]}
+python-multipart = "^0.0.9"
+starlette = "^0.37.1"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
